@@ -1,0 +1,19 @@
+Plan de développement
+
+Créer la structure de projet et importer Pygame
+
+Charger le plateau et les pièces (PNG)
+
+Créer les raquettes et la balle animée
+
+Implémenter le déplacement des raquettes
+
+Gérer le rebond de la balle
+
+Implémenter collision balle → pièce → diminution de vie
+
+Ajouter suppression de pièce si vie=0
+
+Ajouter score et affichage visuel des vies
+
+Tester et ajuster les vitesses / positions

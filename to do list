@@ -1,0 +1,15 @@
+Développer un jeu hybride en Python utilisant Pygame, combinant un plateau d’échecs et un mini-jeu de ping-pong.
+Les pièces des deux joueurs sont positionnées à gauche et à droite du plateau. Les raquettes (paddle) sont en avant des pièces, pouvant se déplacer haut-bas pour frapper la balle. La balle rebondit automatiquement et lorsqu’elle touche une pièce, elle diminue la vie de celle-ci en fonction de son type (ex : Roi=4, Pion=1).
+Le jeu inclut :
+Affichage graphique attractif avec images PNG (issues de SVG)
+Plateau d’échecs visible
+Pièces avec paramètres de vie personnalisables
+Balle noir animée qui rebondit
+Raquettes contrôlables verticalement par clavier
+Interaction balle → pièce → diminution de vie
+Affichage du score ou du nombre de pièces restantes
+Modularité du code pour ajouter facilement de nouvelles pièces et règles
+
+
+.\.venv\Scripts\Activate.ps1
+python -m pip install pygame-ce
