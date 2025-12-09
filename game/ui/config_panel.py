@@ -104,14 +104,13 @@ class ConfigPanel:
         
     def get_height(self) -> int:
         """Retourne la hauteur totale du panneau."""
-        return (len(self.piece_types) * self.piece_item_height + 
-                self.padding * 3 + 40 + self.button_height + self.padding)
+        return self.total_height
     
     def get_input_rect(self, piece_type: str) -> pygame.Rect:
-        """Retourne le rectangle du champ input pour un type de pièce."""
+        """Retourne le rectangle du champ input pour un type de pièce (layout horizontal)."""
         idx = self.piece_types.index(piece_type)
-        y = self.y + 40 + idx * self.piece_item_height + self.piece_item_height - self.input_height - 5
-        x = self.x + self.width - self.input_width - self.padding
+        x = self.x + idx * self.piece_item_width + (self.piece_item_width - self.input_width) // 2
+        y = self.y + 60  # Position fixe sous l'image et la vie
         return pygame.Rect(x, y, self.input_width, self.input_height)
     
     def handle_event(self, event: pygame.event.Event) -> bool:
