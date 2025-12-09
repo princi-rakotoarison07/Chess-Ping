@@ -10,6 +10,6 @@ Interaction balle → pièce → diminution de vie
 Affichage du score ou du nombre de pièces restantes
 Modularité du code pour ajouter facilement de nouvelles pièces et règles
 
-
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install pygame-ce
