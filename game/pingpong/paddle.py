@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from config import SCREEN_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_SPEED
+from config import SCREEN_HEIGHT, PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_SPEED, BOARD_TOP, BOARD_HEIGHT
 
 
 @dataclass
@@ -24,11 +24,14 @@ class Paddle:
         if keys[self.down_key]:
             self.rect.y += PADDLE_SPEED
 
-        # bornes écran
-        if self.rect.top < 0:
-            self.rect.top = 0
-        if self.rect.bottom > SCREEN_HEIGHT:
-            self.rect.bottom = SCREEN_HEIGHT
+        # bornes : uniquement à l'intérieur du plateau
+        board_top = BOARD_TOP
+        board_bottom = BOARD_TOP + BOARD_HEIGHT
+
+        if self.rect.top < board_top:
+            self.rect.top = board_top
+        if self.rect.bottom > board_bottom:
+            self.rect.bottom = board_bottom
 
     def draw(self, surface: pygame.Surface):
         pygame.draw.rect(surface, self.color, self.rect)

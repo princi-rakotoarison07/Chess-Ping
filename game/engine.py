@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import pygame
 
@@ -20,6 +20,7 @@ from game.chess.board import ChessBoard
 from game.chess.piece import Piece
 from game.pingpong.ball import Ball
 from game.pingpong.paddle import Paddle
+from game.ui.config_panel import ConfigPanel
 
 
 class GameEngine:
@@ -35,6 +36,34 @@ class GameEngine:
 
         self.score_left = 0
         self.score_right = 0
+        
+        # Panneaux de configuration
+        panel_width = 200
+        panel_spacing = 20
+        
+        # Panneau pour les pièces blanches (gauche) - en bas à gauche
+        self.white_config_panel = ConfigPanel(
+            x=panel_spacing,
+            y=SCREEN_HEIGHT - 400,
+            width=panel_width,
+            title="Blancs",
+            color_prefix="white"
+        )
+        self.white_config_panel.on_apply = lambda values: self._apply_config_white(values)
+        self.white_config_panel.on_reset = lambda: self._reset_config_white()
+        self.white_config_panel.on_save = lambda values: self._save_config("white", values)
+        
+        # Panneau pour les pièces noires (droite) - en bas à droite
+        self.dark_config_panel = ConfigPanel(
+            x=SCREEN_WIDTH - panel_width - panel_spacing,
+            y=SCREEN_HEIGHT - 400,
+            width=panel_width,
+            title="Noirs",
+            color_prefix="dark"
+        )
+        self.dark_config_panel.on_apply = lambda values: self._apply_config_dark(values)
+        self.dark_config_panel.on_reset = lambda: self._reset_config_dark()
+        self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
         pieces_left: List[Piece] = []
@@ -90,18 +119,20 @@ class GameEngine:
         return pieces_left, pieces_right
 
     def _create_paddles(self):
-        # Paddles à l'intérieur du plateau, entre les colonnes 0-1 (gauche) et 6-7 (droite)
+        # Paddles à l'intérieur du plateau, devant les pions :
+        # - gauche : entre les colonnes 1 (pions blancs) et 2
+        # - droite : entre les colonnes 5 et 6 (pions noirs)
         mid_row = BOARD_ROWS // 2
 
         # Colonnes de référence
-        col0_rect = ChessBoard.get_square_rect(mid_row, 0)
         col1_rect = ChessBoard.get_square_rect(mid_row, 1)
+        col2_rect = ChessBoard.get_square_rect(mid_row, 2)
+        col5_rect = ChessBoard.get_square_rect(mid_row, 5)
         col6_rect = ChessBoard.get_square_rect(mid_row, 6)
-        col7_rect = ChessBoard.get_square_rect(mid_row, 7)
 
         # Position X centrée entre les deux colonnes
-        left_gap_center = (col0_rect.centerx + col1_rect.centerx) // 2
-        right_gap_center = (col6_rect.centerx + col7_rect.centerx) // 2
+        left_gap_center = (col1_rect.centerx + col2_rect.centerx) // 2
+        right_gap_center = (col5_rect.centerx + col6_rect.centerx) // 2
 
         left_x = int(left_gap_center - PADDLE_WIDTH // 2)
         right_x = int(right_gap_center - PADDLE_WIDTH // 2)
@@ -124,6 +155,64 @@ class GameEngine:
             color=(0, 0, 255),
         )
         return left_paddle, right_paddle
+
+    def _apply_config_white(self, values: Dict[str, int]):
+        """Applique la configuration des vies pour les pièces blanches."""
+        for piece in self.pieces_left:
+            if piece.kind in values:
+                new_max_life = values[piece.kind]
+                # Conserver le ratio de vie actuelle/max
+                if piece.max_life > 0:
+                    ratio = piece.life / piece.max_life
+                    piece.max_life = new_max_life
+                    piece.life = int(new_max_life * ratio)
+                else:
+                    piece.max_life = new_max_life
+                    piece.life = new_max_life
+    
+    def _apply_config_dark(self, values: Dict[str, int]):
+        """Applique la configuration des vies pour les pièces noires."""
+        for piece in self.pieces_right:
+            if piece.kind in values:
+                new_max_life = values[piece.kind]
+                # Conserver le ratio de vie actuelle/max
+                if piece.max_life > 0:
+                    ratio = piece.life / piece.max_life
+                    piece.max_life = new_max_life
+                    piece.life = int(new_max_life * ratio)
+                else:
+                    piece.max_life = new_max_life
+                    piece.life = new_max_life
+    
+    def _reset_config_white(self):
+        """Réinitialise les pièces blanches aux valeurs par défaut."""
+        print("Configuration des pièces blanches réinitialisée")
+    
+    def _reset_config_dark(self):
+        """Réinitialise les pièces noires aux valeurs par défaut."""
+        print("Configuration des pièces noires réinitialisée")
+    
+    def _save_config(self, color: str, values: Dict[str, int]):
+        """Sauvegarde la configuration actuelle."""
+        import json
+        try:
+            # Charger les configurations existantes
+            try:
+                with open("chess_config.json", "r") as f:
+                    config = json.load(f)
+            except FileNotFoundError:
+                config = {}
+            
+            # Mettre à jour la configuration pour la couleur donnée
+            config[color] = values
+            
+            # Sauvegarder
+            with open("chess_config.json", "w") as f:
+                json.dump(config, f, indent=2)
+            
+            print(f"Configuration {color} sauvegardée avec succès!")
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde: {e}")
 
     def _handle_collisions(self):
         # collision balle / paddles
@@ -152,18 +241,13 @@ class GameEngine:
                     self.pieces_right.remove(piece)
                     self.score_left += 1
 
-        # si la balle sort à gauche/droite, on remet au centre
-        if self.ball.rect.right < 0:
-            self.ball.reset()
-            self.score_right += 1
-        elif self.ball.rect.left > SCREEN_WIDTH:
-            self.ball.reset()
-            self.score_left += 1
+        # La balle reste confinée dans le plateau : pas de reset basé sur les bords de la fenêtre
 
     def _draw_hud(self):
         text = f"Pieces L:{len(self.pieces_left)}  R:{len(self.pieces_right)}  Score L:{self.score_left} R:{self.score_right}"
         surface = self.font.render(text, True, (255, 255, 255))
         self.screen.blit(surface, (20, 20))
+
 
     def game_loop(self):
         running = True
@@ -172,6 +256,10 @@ class GameEngine:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                
+                # Gérer les événements des panneaux de configuration
+                self.white_config_panel.handle_event(event)
+                self.dark_config_panel.handle_event(event)
 
             keys = pygame.key.get_pressed()
 
@@ -189,5 +277,10 @@ class GameEngine:
             self.right_paddle.draw(self.screen)
             self.ball.draw(self.screen)
             self._draw_hud()
+            
+            # Dessiner les panneaux de configuration
+            self.white_config_panel.draw(self.screen)
+            self.dark_config_panel.draw(self.screen)
 
             pygame.display.flip()
+
