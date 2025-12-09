@@ -8,6 +8,7 @@ from config import SCREEN_WIDTH, SCREEN_HEIGHT, BALL_RADIUS, BALL_SPEED_X, BALL_
 class Ball:
     def __init__(self):
         self.radius = BALL_RADIUS
+        self.color = (0, 0, 0)  # noir par défaut
         self.reset()
 
     def reset(self):
@@ -17,6 +18,7 @@ class Ball:
         self.vy = random.choice([-1, 1]) * BALL_SPEED_Y
         self.rect = pygame.Rect(0, 0, self.radius * 2, self.radius * 2)
         self.rect.center = (self.x, self.y)
+        self.color = (0, 0, 0)
 
     def update(self):
         self.x += self.vx
@@ -28,4 +30,4 @@ class Ball:
             self.vy *= -1
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.circle(surface, (0, 0, 0), (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)

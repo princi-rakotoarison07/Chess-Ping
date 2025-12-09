@@ -11,6 +11,7 @@ class Paddle:
     y: int
     up_key: int
     down_key: int
+    color: tuple[int, int, int] = (50, 200, 50)
 
     def __post_init__(self):
         self.width = PADDLE_WIDTH
@@ -30,4 +31,4 @@ class Paddle:
             self.rect.bottom = SCREEN_HEIGHT
 
     def draw(self, surface: pygame.Surface):
-        pygame.draw.rect(surface, (50, 200, 50), self.rect)
+        pygame.draw.rect(surface, self.color, self.rect)
