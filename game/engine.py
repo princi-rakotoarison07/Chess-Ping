@@ -37,33 +37,40 @@ class GameEngine:
         self.score_left = 0
         self.score_right = 0
         
-        # Panneaux de configuration
-        panel_width = 200
-        panel_spacing = 20
         
-        # Panneau pour les pièces blanches (gauche) - en bas à gauche
-        self.white_config_panel = ConfigPanel(
-            x=panel_spacing,
-            y=SCREEN_HEIGHT - 400,
-            width=panel_width,
-            title="Blancs",
-            color_prefix="white"
-        )
-        self.white_config_panel.on_apply = lambda values: self._apply_config_white(values)
-        self.white_config_panel.on_reset = lambda: self._reset_config_white()
-        self.white_config_panel.on_save = lambda values: self._save_config("white", values)
+        # Panneaux de configuration (disposition horizontale sous le plateau)
+        # Positionner les panneaux complètement en dehors du plateau d'échecs
+        panel_vertical_spacing = 30  # Espacement entre le plateau et les panneaux
         
-        # Panneau pour les pièces noires (droite) - en bas à droite
+        # Calculer la position Y : sous le plateau (BOARD_TOP + BOARD_HEIGHT) + espacement
+        from config import BOARD_TOP, BOARD_HEIGHT
+        panels_y_position = BOARD_TOP + BOARD_HEIGHT + panel_vertical_spacing
+        
+        # Panneau pour les pièces NOIRES (gauche) - aligné sous le bord gauche du plateau
         self.dark_config_panel = ConfigPanel(
-            x=SCREEN_WIDTH - panel_width - panel_spacing,
-            y=SCREEN_HEIGHT - 400,
-            width=panel_width,
+            x=BOARD_LEFT,
+            y=panels_y_position,
             title="Noirs",
             color_prefix="dark"
         )
+        self.dark_config_panel.pieces_list = self.pieces_right  # Pièces noires
         self.dark_config_panel.on_apply = lambda values: self._apply_config_dark(values)
         self.dark_config_panel.on_reset = lambda: self._reset_config_dark()
         self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
+        
+        # Panneau pour les pièces BLANCHES (droite) - aligné sous le bord droit du plateau
+        # Calculer la position X pour aligner à droite du plateau
+        dark_panel_width = self.dark_config_panel.get_width()
+        self.white_config_panel = ConfigPanel(
+            x=BOARD_LEFT + BOARD_WIDTH - dark_panel_width,
+            y=panels_y_position,
+            title="Blancs",
+            color_prefix="white"
+        )
+        self.white_config_panel.pieces_list = self.pieces_left  # Pièces blanches
+        self.white_config_panel.on_apply = lambda values: self._apply_config_white(values)
+        self.white_config_panel.on_reset = lambda: self._reset_config_white()
+        self.white_config_panel.on_save = lambda values: self._save_config("white", values)
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
         pieces_left: List[Piece] = []
