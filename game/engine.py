@@ -15,6 +15,7 @@ from config import (
     BOARD_WIDTH,
     CELL_SIZE,
     PADDLE_WIDTH,
+    BALL_RADIUS,
 )
 from game.chess.board import ChessBoard
 from game.chess.piece import Piece
@@ -89,53 +90,94 @@ class GameEngine:
         pieces_right: List[Piece] = []
 
         # Colonnes latérales pour le placement gauche/droite
+        # Pour les blancs : col 0 = back-rank, col 1 = pions
+        # Pour les noirs : col BOARD_COLS-1 = back-rank, col BOARD_COLS-2 = pions (miroir)
         left_cols = [0, 1]
         right_cols = [BOARD_COLS - 1, BOARD_COLS - 2]
 
         def add_pieces_for_color(color: str, cols: List[int], target_list: List[Piece]):
+            """Place les pièces pour une couleur en suivant la configuration choisie.
+
+            Logique stratégique :
+            - Colonne "frontale" (cols[1]) : d'abord les tours, puis les pions,
+              depuis la ligne la plus avancée vers l'arrière
+              (bas -> haut pour les blancs, haut -> bas pour les noirs).
+            - Colonne "arrière" (cols[0]) : roi puis reine, puis pièces mineures
+              (fous, cavaliers) en partant de l'arrière vers l'avant.
+
+            On ne crée jamais plus de pièces que ce qui est défini dans setup_config.
+            """
+
             if not self.setup_config:
                 return
 
             color_key = "white" if color == "white" else "dark"
             config_for_color = self.setup_config.get(color_key, {})
 
-            # On respecte l'ordre standard des pièces
-            order = ["pawn", "rook", "knight", "bishop", "queen", "king"]
+            # Compteurs restants par type, exactement ceux demandés par le joueur
+            remaining: Dict[str, int] = {}
+            for kind in ["rook", "queen", "king", "bishop", "knight", "pawn"]:
+                data_kind = config_for_color.get(kind, {"count": 0})
+                remaining[kind] = int(data_kind.get("count", 0))
 
-            # Générer une liste plate de types de pièces selon les quantités
-            piece_kinds: List[str] = []
-            for kind in order:
-                data_kind = config_for_color.get(kind, {"count": 0, "life": 1})
-                count = int(data_kind.get("count", 0))
-                if count > 0:
-                    piece_kinds.extend([kind] * count)
+            back_col, front_col = cols[0], cols[1]
 
-            # Capacité maximale: 2 colonnes * BOARD_ROWS = 2 * BOARD_ROWS
-            max_capacity = 2 * BOARD_ROWS
-            piece_kinds = piece_kinds[:max_capacity]
+            # Ordre des lignes selon la couleur
+            if color == "white":
+                # Blancs : front = lignes du bas vers le haut
+                front_rows = list(range(BOARD_ROWS - 1, -1, -1))
+                back_rows = list(range(BOARD_ROWS - 1, -1, -1))
+            else:
+                # Noirs : front = lignes du haut vers le bas (miroir)
+                front_rows = list(range(BOARD_ROWS))
+                back_rows = list(range(BOARD_ROWS))
 
-            # Placement ligne par ligne: on remplit d'abord la 1ère colonne, puis la 2ème
-            idx = 0
-            for row in range(BOARD_ROWS):
-                for col in cols:
-                    if idx >= len(piece_kinds):
-                        return
-                    kind = piece_kinds[idx]
-                    idx += 1
-                    cx, cy = ChessBoard.get_square_center(row, col)
-                    piece = Piece(kind=kind, color=color, position=(cx, cy))
+            front_index = 0
+            back_index = 0
 
-                    # Appliquer la vie configurée pour ce type de pièce
-                    data_kind = config_for_color.get(kind, {"count": 0, "life": piece.max_life})
-                    life_value = int(data_kind.get("life", piece.max_life))
-                    if life_value <= 0:
-                        life_value = 1
-                    piece.max_life = life_value
-                    piece.life = life_value
+            def place_piece(kind: str, row: int, col: int):
+                cx, cy = ChessBoard.get_square_center(row, col)
+                piece = Piece(kind=kind, color=color, position=(cx, cy))
+                # Appliquer la vie configurée pour ce type de pièce
+                data_kind = config_for_color.get(kind, {"life": piece.max_life})
+                life_value = int(data_kind.get("life", piece.max_life))
+                if life_value <= 0:
+                    life_value = 1
+                piece.max_life = life_value
+                piece.life = life_value
+                piece.row = row
+                piece.col = col
+                target_list.append(piece)
 
-                    piece.row = row
-                    piece.col = col
-                    target_list.append(piece)
+            # 1) Tours en colonne frontale
+            while remaining.get("rook", 0) > 0 and front_index < len(front_rows):
+                row = front_rows[front_index]
+                front_index += 1
+                remaining["rook"] -= 1
+                place_piece("rook", row, front_col)
+
+            # 2) Roi puis Reine en colonne arrière
+            for kind in ["king", "queen"]:
+                while remaining.get(kind, 0) > 0 and back_index < len(back_rows):
+                    row = back_rows[back_index]
+                    back_index += 1
+                    remaining[kind] -= 1
+                    place_piece(kind, row, back_col)
+
+            # 3) Pièces mineures (fous, cavaliers) en colonne arrière
+            for kind in ["bishop", "knight"]:
+                while remaining.get(kind, 0) > 0 and back_index < len(back_rows):
+                    row = back_rows[back_index]
+                    back_index += 1
+                    remaining[kind] -= 1
+                    place_piece(kind, row, back_col)
+
+            # 4) Pions restants en colonne frontale
+            while remaining.get("pawn", 0) > 0 and front_index < len(front_rows):
+                row = front_rows[front_index]
+                front_index += 1
+                remaining["pawn"] -= 1
+                place_piece("pawn", row, front_col)
 
         add_pieces_for_color("white", left_cols, pieces_left)
         add_pieces_for_color("dark", right_cols, pieces_right)
@@ -240,10 +282,16 @@ class GameEngine:
 
     def _handle_collisions(self):
         # collision balle / paddles
-        if self.ball.rect.colliderect(self.left_paddle.rect):
+        # On utilise une zone de collision légèrement plus petite que le paddle
+        # pour éviter les rebonds quand la balle est juste en dehors.
+        shrink_y = BALL_RADIUS  # marge en haut et en bas
+        left_coll_rect = self.left_paddle.rect.inflate(0, -2 * shrink_y)
+        right_coll_rect = self.right_paddle.rect.inflate(0, -2 * shrink_y)
+
+        if left_coll_rect.height > 0 and self.ball.rect.colliderect(left_coll_rect):
             self.ball.vx = abs(self.ball.vx)
             self.ball.color = (255, 0, 0)
-        if self.ball.rect.colliderect(self.right_paddle.rect):
+        if right_coll_rect.height > 0 and self.ball.rect.colliderect(right_coll_rect):
             self.ball.vx = -abs(self.ball.vx)
             self.ball.color = (0, 0, 255)
 

@@ -1,7 +1,7 @@
 import pygame
 from typing import Dict, Tuple
 
-from config import SCREEN_WIDTH, SCREEN_HEIGHT
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, PIECE_LIFE
 from utils.loader import load_image
 
 
@@ -26,8 +26,8 @@ class PreGameConfigScreen:
 
         # Structures: {color: {kind: {"count": int, "life": int}}}
         self.data: Dict[str, Dict[str, Dict[str, int]]] = {
-            "white": {k: {"count": 1 if k == "king" else 0, "life": 2 if k == "king" else 1} for k in PIECE_TYPES},
-            "dark": {k: {"count": 1 if k == "king" else 0, "life": 2 if k == "king" else 1} for k in PIECE_TYPES},
+            "white": {k: {"count": 0, "life": PIECE_LIFE.get(k, 1)} for k in PIECE_TYPES},
+            "dark": {k: {"count": 0, "life": PIECE_LIFE.get(k, 1)} for k in PIECE_TYPES},
         }
 
         # Zone d'édition active: (color, kind, field) avec field in {"count", "life"}
@@ -50,7 +50,57 @@ class PreGameConfigScreen:
 
         self.warning_message: str | None = None
 
+        # Initialiser avec une configuration par défaut pour 2 lignes
+        self._reset_defaults_for_rows(self.selected_rows)
+
     # ---- Helpers de layout ----
+
+    def _reset_defaults_for_rows(self, rows: int):
+        """Réinitialise data avec une configuration par défaut complète
+        en fonction du nombre de lignes choisi, sans dépasser 2 * rows pièces
+        par couleur.
+
+        Pour rows = 8, on obtient la configuration standard :
+        8 pions, 2 tours, 2 cavaliers, 2 fous, 1 dame, 1 roi.
+        Pour moins de lignes, on tronque en priorité : roi, dame, tours,
+        fous, cavaliers, pions.
+        """
+
+        # Comptes standard d'un jeu d'échecs par couleur
+        standard_counts = {
+            "pawn": 8,
+            "rook": 2,
+            "knight": 2,
+            "bishop": 2,
+            "queen": 1,
+            "king": 1,
+        }
+
+        limit = 2 * rows
+
+        # Ordre de priorité pour garder les pièces les plus importantes
+        # Tours en premier, puis reine, roi, puis pièces mineures
+        priority_order = ["rook", "queen", "king", "bishop", "knight", "pawn"]
+
+        def compute_counts() -> Dict[str, int]:
+            remaining = limit
+            counts: Dict[str, int] = {k: 0 for k in PIECE_TYPES}
+            for kind in priority_order:
+                if remaining <= 0:
+                    break
+                std = standard_counts.get(kind, 0)
+                take = min(std, remaining)
+                counts[kind] = take
+                remaining -= take
+            return counts
+
+        base_counts = compute_counts()
+
+        for color in ("white", "dark"):
+            for kind in PIECE_TYPES:
+                self.data[color][kind]["count"] = base_counts.get(kind, 0)
+                # Vie par défaut issue de PIECE_LIFE
+                self.data[color][kind]["life"] = PIECE_LIFE.get(kind, 1)
 
     def _get_rows_buttons_rects(self):
         buttons = []
@@ -92,6 +142,8 @@ class PreGameConfigScreen:
         for rows, rect in self._get_rows_buttons_rects():
             if rect.collidepoint(pos):
                 self.selected_rows = rows
+                # Réappliquer une configuration par défaut complète
+                self._reset_defaults_for_rows(rows)
                 return
 
         # Zones de config pièces

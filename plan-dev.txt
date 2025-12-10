@@ -17,3 +17,4 @@ Ajouter suppression de pièce si vie=0
 Ajouter score et affichage visuel des vies
 
 Tester et ajuster les vitesses / positions
+
