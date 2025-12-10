@@ -164,7 +164,9 @@ class NetworkGameEngine(GameEngine):
                 
                 pieces = self.pieces_left if side == "left" else self.pieces_right
                 if 0 <= piece_index < len(pieces):
-                    pieces[piece_index].alive = False
+                    # alive est une propriété en lecture seule basée sur life>0
+                    # On marque donc la pièce comme morte en mettant sa vie à 0.
+                    pieces[piece_index].life = 0
                     
             elif msg_type == protocol.MSG_SCORE_UPDATE:
                 # Mise à jour des scores
