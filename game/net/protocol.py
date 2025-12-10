@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Tuple
 MSG_CONFIG = "config"
 MSG_PADDLE_UPDATE = "paddle_update"
 MSG_BALL_UPDATE = "ball_update"
+MSG_SPEED_UPDATE = "speed_update"
 MSG_PIECE_HIT = "piece_hit"
 MSG_PIECE_DESTROYED = "piece_destroyed"
 MSG_SCORE_UPDATE = "score_update"
@@ -18,13 +19,23 @@ MSG_SERVE_LAUNCH = "serve_launch"
 MSG_GAME_END = "game_end"
 
 
-def make_config_message(setup: Dict, first_server: str, host_paddle: str) -> Dict[str, Any]:
-    """Crée un message de configuration de partie."""
+def make_config_message(
+    setup: Dict,
+    first_server: str,
+    host_paddle: str,
+    ball_speed_factor: float = 1.0,
+) -> Dict[str, Any]:
+    """Crée un message de configuration de partie.
+
+    ball_speed_factor permet de synchroniser le multiplicateur de vitesse
+    initial entre le serveur et le client.
+    """
     return {
         "type": MSG_CONFIG,
         "setup": setup,
         "first_server": first_server,
         "host_paddle": host_paddle,
+        "ball_speed_factor": ball_speed_factor,
     }
 
 
@@ -42,14 +53,27 @@ def make_paddle_update_message(side: str, y: float) -> Dict[str, Any]:
     }
 
 
-def make_ball_update_message(x: float, y: float, vx: float, vy: float) -> Dict[str, Any]:
-    """Crée un message de mise à jour de la balle."""
+def make_ball_update_message(x: float, y: float, vx: float, vy: float, color: Tuple[int, int, int]) -> Dict[str, Any]:
+    """Crée un message de mise à jour de la balle.
+
+    La couleur est incluse pour que le client reflète les changements
+    (par exemple après un rebond sur un paddle).
+    """
     return {
         "type": MSG_BALL_UPDATE,
         "x": x,
         "y": y,
         "vx": vx,
         "vy": vy,
+        "color": list(color),
+    }
+
+
+def make_speed_update_message(factor: float) -> Dict[str, Any]:
+    """Crée un message de mise à jour du multiplicateur de vitesse de balle."""
+    return {
+        "type": MSG_SPEED_UPDATE,
+        "factor": factor,
     }
 
 

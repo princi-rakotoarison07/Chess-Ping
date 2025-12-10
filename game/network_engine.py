@@ -61,7 +61,11 @@ class NetworkGameEngine(GameEngine):
             
         # Envoyer la position de la balle (le serveur a l'autorité)
         ball_msg = protocol.make_ball_update_message(
-            self.ball.x, self.ball.y, self.ball.vx, self.ball.vy
+            self.ball.x,
+            self.ball.y,
+            self.ball.vx,
+            self.ball.vy,
+            self.ball.color,
         )
         self.server_conn.send_game_message(ball_msg)
         
@@ -136,7 +140,13 @@ class NetworkGameEngine(GameEngine):
                 self.ball.y = msg.get("y", self.ball.y)
                 self.ball.vx = msg.get("vx", self.ball.vx)
                 self.ball.vy = msg.get("vy", self.ball.vy)
+                color = msg.get("color")
+                if isinstance(color, (list, tuple)) and len(color) == 3:
+                    self.ball.color = tuple(color)
                 self.ball.rect.center = (int(self.ball.x), int(self.ball.y))
+                # Si la balle se met en mouvement, on quitte l'état de service
+                if self.serving and (self.ball.vx != 0 or self.ball.vy != 0):
+                    self.serving = False
                 
             elif msg_type == protocol.MSG_PADDLE_UPDATE:
                 # Mettre à jour le paddle adverse
@@ -164,14 +174,22 @@ class NetworkGameEngine(GameEngine):
                 
                 pieces = self.pieces_left if side == "left" else self.pieces_right
                 if 0 <= piece_index < len(pieces):
-                    # alive est une propriété en lecture seule basée sur life>0
-                    # On marque donc la pièce comme morte en mettant sa vie à 0.
+                    # alive est une propriété en lecture seule basée sur life>0.
+                    # On marque donc la pièce comme morte en mettant sa vie à 0,
+                    # puis on la retire de la liste locale pour rester aligné avec le serveur.
                     pieces[piece_index].life = 0
+                    pieces.pop(piece_index)
                     
             elif msg_type == protocol.MSG_SCORE_UPDATE:
                 # Mise à jour des scores
                 self.score_left = msg.get("score_left", self.score_left)
                 self.score_right = msg.get("score_right", self.score_right)
+            elif msg_type == protocol.MSG_SPEED_UPDATE:
+                # Synchronisation du multiplicateur de vitesse
+                factor = msg.get("factor")
+                if isinstance(factor, (int, float)):
+                    self.ball_speed_factor = float(factor)
+                    self._apply_ball_speed_factor()
 
     def _handle_collisions(self):
         """Override pour gérer les collisions différemment selon le mode réseau."""
@@ -309,9 +327,17 @@ class NetworkGameEngine(GameEngine):
                     if self._speed_minus_rect.collidepoint(event.pos):
                         self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
                         self._apply_ball_speed_factor()
+                        # Synchroniser la nouvelle vitesse côté serveur
+                        if self.network_mode == "server" and self.server_conn:
+                            msg = protocol.make_speed_update_message(self.ball_speed_factor)
+                            self.server_conn.send_game_message(msg)
                     elif self._speed_plus_rect.collidepoint(event.pos):
                         self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
                         self._apply_ball_speed_factor()
+                        # Synchroniser la nouvelle vitesse côté serveur
+                        if self.network_mode == "server" and self.server_conn:
+                            msg = protocol.make_speed_update_message(self.ball_speed_factor)
+                            self.server_conn.send_game_message(msg)
 
                 # Lancement manuel de la balle (seulement si c'est notre tour de servir)
                 if self.serving:

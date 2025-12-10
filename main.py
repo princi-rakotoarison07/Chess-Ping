@@ -107,7 +107,14 @@ def main():
 
         # Envoyer la configuration au client
         from game.net import protocol
-        config_msg = protocol.make_config_message(setup, first_server, host_paddle)
+        # Pour l'instant, on envoie un multiplicateur de vitesse initial = 1.0.
+        # Il sera ensuite synchronisé en temps réel si le serveur le modifie.
+        config_msg = protocol.make_config_message(
+            setup,
+            first_server,
+            host_paddle,
+            ball_speed_factor=1.0,
+        )
         
         try:
             server.send_config(config_msg)
@@ -177,6 +184,7 @@ def main():
         setup = cfg.get("setup")
         first_server = cfg.get("first_server")
         host_paddle = cfg.get("host_paddle")
+        ball_speed_factor = cfg.get("ball_speed_factor", 1.0)
         
         # Le client joue le paddle opposé à l'hôte
         client_paddle = "right" if host_paddle == "left" else "left"
@@ -232,6 +240,8 @@ def main():
             client_conn=client,
             controlled_paddle=client_paddle,
         )
+        # Appliquer le multiplicateur de vitesse défini par le serveur.
+        engine.ball_speed_factor = float(ball_speed_factor)
         try:
             engine.game_loop()
         finally:
