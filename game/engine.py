@@ -24,10 +24,12 @@ from game.ui.config_panel import ConfigPanel
 
 
 class GameEngine:
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, setup_config: Dict | None = None):
         self.screen = screen
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(DEFAULT_FONT_NAME, 22)
+
+        self.setup_config = setup_config
 
         self.pieces_left, self.pieces_right = self._create_pieces()
         self.board = ChessBoard(self.pieces_left, self.pieces_right)
@@ -76,55 +78,67 @@ class GameEngine:
         self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
+        """Crée les pièces pour les deux camps.
+
+        Si setup_config est fourni, on utilise les quantités et vies configurées
+        en respectant la limite total_pieces <= 2 * BOARD_ROWS par couleur.
+        Sinon, on pourrait rétablir un placement par défaut (non utilisé ici).
+        """
+
         pieces_left: List[Piece] = []
         pieces_right: List[Piece] = []
 
-        # Placement latéral : colonnes 0-1 pour le joueur gauche, 6-7 pour le joueur droit
-        # On utilise une rangée "forte" (back_rank) et une rangée de pions sur chaque camp.
-        back_rank = [
-            "rook",
-            "knight",
-            "bishop",
-            "queen",
-            "king",
-            "bishop",
-            "knight",
-            "rook",
-        ]
+        # Colonnes latérales pour le placement gauche/droite
+        left_cols = [0, 1]
+        right_cols = [BOARD_COLS - 1, BOARD_COLS - 2]
 
-        # Joueur gauche : colonnes 0 (pièces lourdes) et 1 (pions)
-        left_back_col = 0
-        left_pawn_col = 1
-        for row, kind in enumerate(back_rank):
-            cx, cy = ChessBoard.get_square_center(row, left_back_col)
-            piece = Piece(kind=kind, color="white", position=(cx, cy))
-            piece.row = row
-            piece.col = left_back_col
-            pieces_left.append(piece)
+        def add_pieces_for_color(color: str, cols: List[int], target_list: List[Piece]):
+            if not self.setup_config:
+                return
 
-        for row in range(BOARD_ROWS):
-            cx, cy = ChessBoard.get_square_center(row, left_pawn_col)
-            piece = Piece(kind="pawn", color="white", position=(cx, cy))
-            piece.row = row
-            piece.col = left_pawn_col
-            pieces_left.append(piece)
+            color_key = "white" if color == "white" else "dark"
+            config_for_color = self.setup_config.get(color_key, {})
 
-        # Joueur droit : colonnes 7 (pièces lourdes) et 6 (pions)
-        right_back_col = BOARD_COLS - 1  # 7
-        right_pawn_col = BOARD_COLS - 2  # 6
-        for row, kind in enumerate(back_rank):
-            cx, cy = ChessBoard.get_square_center(row, right_back_col)
-            piece = Piece(kind=kind, color="dark", position=(cx, cy))
-            piece.row = row
-            piece.col = right_back_col
-            pieces_right.append(piece)
+            # On respecte l'ordre standard des pièces
+            order = ["pawn", "rook", "knight", "bishop", "queen", "king"]
 
-        for row in range(BOARD_ROWS):
-            cx, cy = ChessBoard.get_square_center(row, right_pawn_col)
-            piece = Piece(kind="pawn", color="dark", position=(cx, cy))
-            piece.row = row
-            piece.col = right_pawn_col
-            pieces_right.append(piece)
+            # Générer une liste plate de types de pièces selon les quantités
+            piece_kinds: List[str] = []
+            for kind in order:
+                data_kind = config_for_color.get(kind, {"count": 0, "life": 1})
+                count = int(data_kind.get("count", 0))
+                if count > 0:
+                    piece_kinds.extend([kind] * count)
+
+            # Capacité maximale: 2 colonnes * BOARD_ROWS = 2 * BOARD_ROWS
+            max_capacity = 2 * BOARD_ROWS
+            piece_kinds = piece_kinds[:max_capacity]
+
+            # Placement ligne par ligne: on remplit d'abord la 1ère colonne, puis la 2ème
+            idx = 0
+            for row in range(BOARD_ROWS):
+                for col in cols:
+                    if idx >= len(piece_kinds):
+                        return
+                    kind = piece_kinds[idx]
+                    idx += 1
+                    cx, cy = ChessBoard.get_square_center(row, col)
+                    piece = Piece(kind=kind, color=color, position=(cx, cy))
+
+                    # Appliquer la vie configurée pour ce type de pièce
+                    data_kind = config_for_color.get(kind, {"count": 0, "life": piece.max_life})
+                    life_value = int(data_kind.get("life", piece.max_life))
+                    if life_value <= 0:
+                        life_value = 1
+                    piece.max_life = life_value
+                    piece.life = life_value
+
+                    piece.row = row
+                    piece.col = col
+                    target_list.append(piece)
+
+        add_pieces_for_color("white", left_cols, pieces_left)
+        add_pieces_for_color("dark", right_cols, pieces_right)
 
         return pieces_left, pieces_right
 
