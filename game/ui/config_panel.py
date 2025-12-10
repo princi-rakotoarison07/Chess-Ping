@@ -7,7 +7,7 @@ from config import PIECE_LIFE
 class ConfigPanel:
     """Panneau de configuration horizontal et transparent pour modifier les vies des pièces."""
     
-    def __init__(self, x: int, y: int, title: str, color_prefix: str):
+    def __init__(self, x: int, y: int, title: str, color_prefix: str, width: int | None = None):
         """
         Args:
             x, y: Position du panneau (coin supérieur gauche)
@@ -18,9 +18,10 @@ class ConfigPanel:
         self.y = y
         self.title = title
         self.color_prefix = color_prefix
+        self.width = width
         
-        # Types de pièces dans l'ordre d'affichage (sans le roi comme demandé)
-        self.piece_types = ["pawn", "rook", "knight", "bishop", "queen"]
+        # Types de pièces dans l'ordre d'affichage (avec le roi)
+        self.piece_types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
         
         # Valeurs actuelles de configuration (copiées depuis PIECE_LIFE)
         self.piece_values: Dict[str, int] = PIECE_LIFE.copy()
@@ -39,17 +40,17 @@ class ConfigPanel:
         self.piece_images: Dict[str, pygame.Surface] = {}
         for piece_type in self.piece_types:
             filename = f"{piece_type.capitalize()}_{self.color_prefix.capitalize()}.png"
-            image = load_image(filename, fallback_rect_size=(30, 30))
-            # Redimensionner à une taille compacte pour l'affichage horizontal
-            self.piece_images[piece_type] = pygame.transform.scale(image, (30, 30))
+            image = load_image(filename, fallback_rect_size=(40, 40))
+            # Redimensionner à une taille agrandi pour l'affichage horizontal
+            self.piece_images[piece_type] = pygame.transform.scale(image, (40, 40))
         
-        # Dimensions pour layout horizontal
-        self.piece_item_width = 70  # Largeur de chaque colonne de pièce
-        self.piece_icon_size = 30
-        self.padding = 8
-        self.input_width = 50
-        self.input_height = 25
-        self.title_height = 25
+        # Dimensions pour layout horizontal (espace agrandi pour utiliser tout le footer)
+        self.piece_item_width = 100  # Largeur de chaque colonne de pièce (très agrandi)
+        self.piece_icon_size = 40
+        self.padding = 15
+        self.input_width = 60
+        self.input_height = 28
+        self.title_height = 30
         
         # Couleurs (fond transparent)
         self.title_color = (255, 255, 255)
@@ -63,6 +64,16 @@ class ConfigPanel:
         self.title_font = pygame.font.Font(None, 22)
         self.label_font = pygame.font.Font(None, 16)
         self.input_font = pygame.font.Font(None, 18)
+
+        # Adapter dynamiquement la largeur des colonnes de pièces si une largeur fixe est fournie
+        if self.width is not None:
+            available_width = max(0, self.width - self.padding * 2)
+            if self.piece_types:
+                self.piece_item_width = max(60, available_width // len(self.piece_types))
+                # Réduire légèrement la taille des icônes si nécessaire
+                max_icon_size = int(self.piece_item_width * 0.8)
+                if max_icon_size < self.piece_icon_size:
+                    self.piece_icon_size = max(24, max_icon_size)
         
         # Callbacks
         self.on_apply: Callable[[Dict[str, int]], None] = None
@@ -71,6 +82,8 @@ class ConfigPanel:
         
     def get_width(self) -> int:
         """Retourne la largeur totale du panneau."""
+        if self.width is not None:
+            return self.width
         return len(self.piece_types) * self.piece_item_width + self.padding * 2
     
     def get_height(self) -> int:

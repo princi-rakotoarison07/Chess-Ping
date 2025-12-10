@@ -34,43 +34,46 @@ class GameEngine:
         self.ball = Ball()
         self.left_paddle, self.right_paddle = self._create_paddles()
 
+        # Mémorise la dernière pièce touchée pour éviter plusieurs hits tant que la balle reste en contact
+        self.last_hit_piece = None
+
         self.score_left = 0
         self.score_right = 0
         
         
-        # Panneaux de configuration (disposition horizontale sous le plateau)
-        # Positionner les panneaux complètement en dehors du plateau d'échecs
-        panel_vertical_spacing = 30  # Espacement entre le plateau et les panneaux
-        
-        # Calculer la position Y : sous le plateau (BOARD_TOP + BOARD_HEIGHT) + espacement
+        # Panneaux de configuration (footer) sur toute la largeur, sous le plateau
+        panel_vertical_spacing = 10  # Espacement réduit pour une interface plus compacte
+
         from config import BOARD_TOP, BOARD_HEIGHT
         panels_y_position = BOARD_TOP + BOARD_HEIGHT + panel_vertical_spacing
-        
-        # Panneau pour les pièces NOIRES (gauche) - aligné sous le bord gauche du plateau
-        self.dark_config_panel = ConfigPanel(
-            x=BOARD_LEFT,
-            y=panels_y_position,
-            title="Noirs",
-            color_prefix="dark"
-        )
-        self.dark_config_panel.pieces_list = self.pieces_right  # Pièces noires
-        self.dark_config_panel.on_apply = lambda values: self._apply_config_dark(values)
-        self.dark_config_panel.on_reset = lambda: self._reset_config_dark()
-        self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
-        
-        # Panneau pour les pièces BLANCHES (droite) - aligné sous le bord droit du plateau
-        # Calculer la position X pour aligner à droite du plateau
-        dark_panel_width = self.dark_config_panel.get_width()
+
+        half_width = SCREEN_WIDTH // 2
+
+        # Panneau pour les pièces BLANCHES (gauche) - moitié gauche de l'écran
         self.white_config_panel = ConfigPanel(
-            x=BOARD_LEFT + BOARD_WIDTH - dark_panel_width,
+            x=0,
             y=panels_y_position,
             title="Blancs",
-            color_prefix="white"
+            color_prefix="white",
+            width=half_width,
         )
         self.white_config_panel.pieces_list = self.pieces_left  # Pièces blanches
         self.white_config_panel.on_apply = lambda values: self._apply_config_white(values)
         self.white_config_panel.on_reset = lambda: self._reset_config_white()
         self.white_config_panel.on_save = lambda values: self._save_config("white", values)
+
+        # Panneau pour les pièces NOIRES (droite) - moitié droite de l'écran
+        self.dark_config_panel = ConfigPanel(
+            x=half_width,
+            y=panels_y_position,
+            title="Noirs",
+            color_prefix="dark",
+            width=SCREEN_WIDTH - half_width,
+        )
+        self.dark_config_panel.pieces_list = self.pieces_right  # Pièces noires
+        self.dark_config_panel.on_apply = lambda values: self._apply_config_dark(values)
+        self.dark_config_panel.on_reset = lambda: self._reset_config_dark()
+        self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
         pieces_left: List[Piece] = []
@@ -230,30 +233,64 @@ class GameEngine:
             self.ball.vx = -abs(self.ball.vx)
             self.ball.color = (0, 0, 255)
 
+        # Réinitialiser la dernière pièce touchée si la balle n'est plus en contact
+        if self.last_hit_piece is not None:
+            if (not self.last_hit_piece.alive) or (not self.ball.rect.colliderect(self.last_hit_piece.rect)):
+                self.last_hit_piece = None
+
         # collision balle / pièces
+        # Règle : une attaque de balle ne peut enlever qu'1 point de vie au total par frame.
         damage = 1
+        hit_handled = False
+
+        # On commence par tester les pièces de gauche
         for piece in list(self.pieces_left):
-            if piece.alive and self.ball.rect.colliderect(piece.rect):
+            if (
+                not hit_handled
+                and piece.alive
+                and self.ball.rect.colliderect(piece.rect)
+                and piece is not self.last_hit_piece
+            ):
+                before = piece.life
                 piece.hit(damage)
+                after = piece.life
+                print(f"HIT LEFT {piece.color} {piece.kind}: {before} -> {after}")
                 self.ball.vx = abs(self.ball.vx)
                 if not piece.alive:
+                    print(f"REMOVE LEFT {piece.color} {piece.kind} (life={after}), score_right={self.score_right + 1}")
                     self.pieces_left.remove(piece)
                     self.score_right += 1
+                self.last_hit_piece = piece
+                hit_handled = True
+                break
 
-        for piece in list(self.pieces_right):
-            if piece.alive and self.ball.rect.colliderect(piece.rect):
-                piece.hit(damage)
-                self.ball.vx = -abs(self.ball.vx)
-                if not piece.alive:
-                    self.pieces_right.remove(piece)
-                    self.score_left += 1
+        # Si aucune pièce de gauche n'a été touchée, on teste les pièces de droite
+        if not hit_handled:
+            for piece in list(self.pieces_right):
+                if (
+                    piece.alive
+                    and self.ball.rect.colliderect(piece.rect)
+                    and piece is not self.last_hit_piece
+                ):
+                    before = piece.life
+                    piece.hit(damage)
+                    after = piece.life
+                    print(f"HIT RIGHT {piece.color} {piece.kind}: {before} -> {after}")
+                    self.ball.vx = -abs(self.ball.vx)
+                    if not piece.alive:
+                        print(f"REMOVE RIGHT {piece.color} {piece.kind} (life={after}), score_left={self.score_left + 1}")
+                        self.pieces_right.remove(piece)
+                        self.score_left += 1
+                    self.last_hit_piece = piece
+                    break
 
         # La balle reste confinée dans le plateau : pas de reset basé sur les bords de la fenêtre
 
     def _draw_hud(self):
         text = f"Pieces L:{len(self.pieces_left)}  R:{len(self.pieces_right)}  Score L:{self.score_left} R:{self.score_right}"
         surface = self.font.render(text, True, (255, 255, 255))
-        self.screen.blit(surface, (20, 20))
+        # Remonter le HUD pour réduire la hauteur du header
+        self.screen.blit(surface, (20, 10))
 
 
     def game_loop(self):
@@ -284,8 +321,15 @@ class GameEngine:
             self.right_paddle.draw(self.screen)
             self.ball.draw(self.screen)
             self._draw_hud()
-            
-            # Dessiner les panneaux de configuration
+
+            # Dessiner un fond de footer semi-transparent sur toute la largeur
+            footer_y = self.white_config_panel.y
+            footer_height = self.white_config_panel.get_height()
+            footer_surface = pygame.Surface((SCREEN_WIDTH, footer_height), pygame.SRCALPHA)
+            footer_surface.fill((10, 10, 20, 180))
+            self.screen.blit(footer_surface, (0, footer_y))
+
+            # Dessiner les panneaux de configuration par-dessus le footer
             self.white_config_panel.draw(self.screen)
             self.dark_config_panel.draw(self.screen)
 
