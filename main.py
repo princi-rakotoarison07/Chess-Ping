@@ -41,14 +41,9 @@ def main():
         # Importer GameEngine après la configuration du plateau pour qu'il lise les bons paramètres
         from game.engine import GameEngine
 
-        engine = GameEngine(
-            screen,
-            setup_config=setup,
-            first_server=first_server,
-            net_role="local",
-            net_socket=None,
-        )
+        engine = GameEngine(screen, setup_config=setup, first_server=first_server)
         engine.game_loop()
+
 
     elif mode == "server":
         # Mode serveur : démarrer un socket, afficher IP, attendre un client,
@@ -111,12 +106,9 @@ def main():
         host_paddle = "left"
 
         # Envoyer la configuration au client
-        config_msg = {
-            "type": "config",
-            "setup": setup,
-            "first_server": first_server,
-            "host_paddle": host_paddle,
-        }
+        from game.net import protocol
+        config_msg = protocol.make_config_message(setup, first_server, host_paddle)
+        
         try:
             server.send_config(config_msg)
         except Exception:
@@ -124,17 +116,26 @@ def main():
             pygame.quit()
             return
 
-        from game.engine import GameEngine
+        # Utiliser NetworkGameEngine pour le mode multijoueur
+        from game.network_engine import NetworkGameEngine
 
-        engine = GameEngine(screen, setup_config=setup, first_server=first_server)
+        engine = NetworkGameEngine(
+            screen,
+            setup_config=setup,
+            first_server=first_server,
+            network_mode="server",
+            server_conn=server,
+            controlled_paddle=host_paddle,
+        )
         try:
             engine.game_loop()
         finally:
             server.close()
 
+
     elif mode == "client":
         # Mode client : saisir IP/port, se connecter, recevoir la config,
-        # l'afficher, puis (dans une étape suivante) lancer un client graphique.
+        # puis lancer le jeu en mode client.
         join_screen = JoinGameScreen(screen)
         ip_port = join_screen.run()
         if ip_port is None:
@@ -146,23 +147,42 @@ def main():
         try:
             client.connect()
             cfg = client.recv_config()
-        except Exception:
+        except Exception as e:
+            # Afficher un message d'erreur
+            font = pygame.font.Font(None, 32)
+            screen.fill((10, 10, 30))
+            msg = f"Erreur de connexion: {str(e)}"
+            surf = font.render(msg, True, (255, 80, 80))
+            screen.blit(surf, surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+            pygame.display.flip()
+            pygame.time.wait(3000)
             client.close()
             pygame.quit()
             return
 
-        if cfg is None or cfg.get("type") != "config":
+        if cfg is None:
+            # Afficher un message d'erreur
+            font = pygame.font.Font(None, 32)
+            screen.fill((10, 10, 30))
+            msg = "Echec de la reception de la configuration."
+            surf = font.render(msg, True, (255, 80, 80))
+            screen.blit(surf, surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+            pygame.display.flip()
+            pygame.time.wait(3000)
             client.close()
             pygame.quit()
             return
 
-        # Appliquer la configuration reçue côté client
-        setup = cfg.get("setup", {})
-        first_server = cfg.get("first_server", "left")
+        # Extraire la configuration
+        setup = cfg.get("setup")
+        first_server = cfg.get("first_server")
+        host_paddle = cfg.get("host_paddle")
+        
+        # Le client joue le paddle opposé à l'hôte
+        client_paddle = "right" if host_paddle == "left" else "left"
 
-        # Mettre à jour le plateau avec les mêmes paramètres que le serveur
-        rows = setup.get("rows", config.BOARD_ROWS)
-        config.BOARD_ROWS = rows
+        # Mettre à jour dynamiquement BOARD_ROWS et les valeurs dérivées
+        config.BOARD_ROWS = setup["rows"]
         config.BOARD_HEIGHT = config.CELL_SIZE * config.BOARD_ROWS
         config.BOARD_TOP = (config.SCREEN_HEIGHT - config.BOARD_HEIGHT) // 2
         config.BOARD_WIDTH = config.CELL_SIZE * config.BOARD_COLS
@@ -170,21 +190,53 @@ def main():
         config.LEFT_AREA_X = config.BOARD_LEFT - 200
         config.RIGHT_AREA_X = config.BOARD_LEFT + config.BOARD_WIDTH + 200
 
-        # Lancer GameEngine en mode client (spectateur synchronisé)
-        from game.engine import GameEngine
+        # Afficher un écran de confirmation avant de lancer le jeu
+        font = pygame.font.Font(None, 32)
+        clock = pygame.time.Clock()
+        waiting = True
+        while waiting:
+            clock.tick(30)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    client.close()
+                    pygame.quit()
+                    return
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    waiting = False
 
-        engine = GameEngine(
+            screen.fill((10, 10, 30))
+            lines = [
+                "Connecté au serveur !",
+                f"Vous contrôlez le paddle {client_paddle}",
+                f"Premier serveur: {first_server}",
+                "",
+                "Appuyez sur une touche pour commencer...",
+            ]
+            for i, line in enumerate(lines):
+                surf = font.render(line, True, (255, 255, 255))
+                screen.blit(
+                    surf,
+                    surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3 + i * 35)),
+                )
+
+            pygame.display.flip()
+
+        # Utiliser NetworkGameEngine pour le mode client
+        from game.network_engine import NetworkGameEngine
+
+        engine = NetworkGameEngine(
             screen,
             setup_config=setup,
             first_server=first_server,
-            net_role="client",
-            net_socket=client.sock,
+            network_mode="client",
+            client_conn=client,
+            controlled_paddle=client_paddle,
         )
-
         try:
             engine.game_loop()
         finally:
             client.close()
+
 
     pygame.quit()
 
