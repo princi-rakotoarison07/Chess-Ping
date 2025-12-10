@@ -76,31 +76,41 @@ class PreGameConfigScreen:
             "king": 1,
         }
 
-        limit = 2 * rows
+        # Cas 1 : plateau complet (8 lignes) -> configuration standard d'échecs
+        if rows == 8:
+            limit = 2 * rows
 
-        # Ordre de priorité pour garder les pièces les plus importantes
-        # Tours en premier, puis reine, roi, puis pièces mineures
-        priority_order = ["rook", "queen", "king", "bishop", "knight", "pawn"]
+            # Ordre de priorité pour garder les pièces les plus importantes
+            # Tours en premier, puis reine, roi, puis pièces mineures
+            priority_order = ["rook", "queen", "king", "bishop", "knight", "pawn"]
 
-        def compute_counts() -> Dict[str, int]:
-            remaining = limit
-            counts: Dict[str, int] = {k: 0 for k in PIECE_TYPES}
-            for kind in priority_order:
-                if remaining <= 0:
-                    break
-                std = standard_counts.get(kind, 0)
-                take = min(std, remaining)
-                counts[kind] = take
-                remaining -= take
-            return counts
+            def compute_counts() -> Dict[str, int]:
+                remaining = limit
+                counts: Dict[str, int] = {k: 0 for k in PIECE_TYPES}
+                for kind in priority_order:
+                    if remaining <= 0:
+                        break
+                    std = standard_counts.get(kind, 0)
+                    take = min(std, remaining)
+                    counts[kind] = take
+                    remaining -= take
+                return counts
 
-        base_counts = compute_counts()
+            base_counts = compute_counts()
 
-        for color in ("white", "dark"):
-            for kind in PIECE_TYPES:
-                self.data[color][kind]["count"] = base_counts.get(kind, 0)
-                # Vie par défaut issue de PIECE_LIFE
-                self.data[color][kind]["life"] = PIECE_LIFE.get(kind, 1)
+            for color in ("white", "dark"):
+                for kind in PIECE_TYPES:
+                    self.data[color][kind]["count"] = base_counts.get(kind, 0)
+                    # Vie par défaut issue de PIECE_LIFE
+                    self.data[color][kind]["life"] = PIECE_LIFE.get(kind, 1)
+
+        # Cas 2 : petit plateau (rows < 8) -> aucun pion/ni pièce par défaut,
+        # l'utilisateur choisit explicitement quelles pièces utiliser.
+        else:
+            for color in ("white", "dark"):
+                for kind in PIECE_TYPES:
+                    self.data[color][kind]["count"] = 0
+                    self.data[color][kind]["life"] = PIECE_LIFE.get(kind, 1)
 
     def _get_rows_buttons_rects(self):
         buttons = []
