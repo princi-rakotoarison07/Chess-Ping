@@ -1,5 +1,6 @@
 from typing import List, Tuple, Dict
 
+import math
 import pygame
 
 from config import (
@@ -16,6 +17,8 @@ from config import (
     CELL_SIZE,
     PADDLE_WIDTH,
     BALL_RADIUS,
+    BALL_SPEED_X,
+    BALL_SPEED_Y,
 )
 from game.chess.board import ChessBoard
 from game.chess.piece import Piece
@@ -25,17 +28,24 @@ from game.ui.config_panel import ConfigPanel
 
 
 class GameEngine:
-    def __init__(self, screen: pygame.Surface, setup_config: Dict | None = None):
+    def __init__(self, screen: pygame.Surface, setup_config: Dict | None = None, first_server: str = "left"):
         self.screen = screen
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(DEFAULT_FONT_NAME, 22)
 
         self.setup_config = setup_config
+        self.first_server = first_server  # "left" (Blancs) ou "right" (Noirs)
 
         self.pieces_left, self.pieces_right = self._create_pieces()
         self.board = ChessBoard(self.pieces_left, self.pieces_right)
         self.ball = Ball()
         self.left_paddle, self.right_paddle = self._create_paddles()
+
+        # État de service : balle attachée au paddle jusqu'au lancement manuel
+        self.serving = True
+        self.server_side = self.first_server  # "left" ou "right"
+        self.serve_angle = 0.0
+        self._reset_ball_for_serve()
 
         # Mémorise la dernière pièce touchée pour éviter plusieurs hits tant que la balle reste en contact
         self.last_hit_piece = None
@@ -77,6 +87,97 @@ class GameEngine:
         self.dark_config_panel.on_apply = lambda values: self._apply_config_dark(values)
         self.dark_config_panel.on_reset = lambda: self._reset_config_dark()
         self.dark_config_panel.on_save = lambda values: self._save_config("dark", values)
+
+    def _reset_ball_for_serve(self):
+        """Positionne la balle attachée au paddle du serveur, sans mouvement."""
+        if self.server_side == "right":
+            paddle = self.right_paddle
+            direction = -1
+        else:
+            paddle = self.left_paddle
+            direction = 1
+
+        # Balle légèrement devant le paddle
+        if direction > 0:
+            x = paddle.rect.right + BALL_RADIUS + 2
+        else:
+            x = paddle.rect.left - BALL_RADIUS - 2
+        y = paddle.rect.centery
+
+        self.ball.x = x
+        self.ball.y = y
+        self.ball.rect.center = (int(x), int(y))
+        self.ball.vx = 0
+        self.ball.vy = 0
+
+        # Angle initial : vers l'adversaire
+        self.serve_angle = 0.0 if direction > 0 else math.pi
+
+    def _update_serve(self):
+        """Met à jour la position de la balle et l'angle de service tant que l'on sert."""
+        if not self.serving:
+            return
+
+        # Attacher la balle au paddle du serveur
+        paddle = self.right_paddle if self.server_side == "right" else self.left_paddle
+        direction = -1 if self.server_side == "right" else 1
+
+        if direction > 0:
+            x = paddle.rect.right + BALL_RADIUS + 2
+        else:
+            x = paddle.rect.left - BALL_RADIUS - 2
+        y = paddle.rect.centery
+
+        self.ball.x = x
+        self.ball.y = y
+        self.ball.rect.center = (int(x), int(y))
+
+        # Calculer l'angle en fonction de la souris
+        mx, my = pygame.mouse.get_pos()
+        dx = mx - x
+        dy = my - y
+        if dx == 0 and dy == 0:
+            # éviter un angle NaN
+            self.serve_angle = 0.0 if direction > 0 else math.pi
+        else:
+            self.serve_angle = math.atan2(dy, dx)
+
+    def _draw_serve_arrow(self):
+        """Dessine une petite flèche indiquant la direction du service."""
+        if not self.serving:
+            return
+
+        cx, cy = int(self.ball.x), int(self.ball.y)
+        length = 50
+        end_x = cx + int(math.cos(self.serve_angle) * length)
+        end_y = cy + int(math.sin(self.serve_angle) * length)
+
+        # Ligne principale
+        pygame.draw.line(self.screen, (255, 255, 0), (cx, cy), (end_x, end_y), 2)
+
+        # Petite pointe de flèche
+        head_len = 10
+        angle1 = self.serve_angle + math.radians(150)
+        angle2 = self.serve_angle - math.radians(150)
+        head1 = (
+            end_x + int(math.cos(angle1) * head_len),
+            end_y + int(math.sin(angle1) * head_len),
+        )
+        head2 = (
+            end_x + int(math.cos(angle2) * head_len),
+            end_y + int(math.sin(angle2) * head_len),
+        )
+        pygame.draw.line(self.screen, (255, 255, 0), (end_x, end_y), head1, 2)
+        pygame.draw.line(self.screen, (255, 255, 0), (end_x, end_y), head2, 2)
+
+    def _launch_ball(self):
+        """Lance la balle dans la direction courante de la flèche."""
+        if not self.serving:
+            return
+        speed = math.hypot(BALL_SPEED_X, BALL_SPEED_Y)
+        self.ball.vx = math.cos(self.serve_angle) * speed
+        self.ball.vy = math.sin(self.serve_angle) * speed
+        self.serving = False
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
         """Crée les pièces pour les deux camps.
@@ -352,6 +453,10 @@ class GameEngine:
             print(f"Erreur lors de la sauvegarde: {e}")
 
     def _handle_collisions(self):
+        # Pendant le service, on ne gère pas les collisions (la balle est attachée)
+        if self.serving:
+            return
+
         # collision balle / paddles
         # On utilise une zone de collision légèrement plus petite que le paddle
         # pour éviter les rebonds quand la balle est juste en dehors.
@@ -438,13 +543,23 @@ class GameEngine:
                 self.white_config_panel.handle_event(event)
                 self.dark_config_panel.handle_event(event)
 
+                # Lancement manuel de la balle
+                if self.serving:
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        self._launch_ball()
+                    if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                        self._launch_ball()
+
             keys = pygame.key.get_pressed()
 
             # update
             self.left_paddle.update(keys)
             self.right_paddle.update(keys)
-            self.ball.update()
-            self._handle_collisions()
+            if self.serving:
+                self._update_serve()
+            else:
+                self.ball.update()
+                self._handle_collisions()
 
             # draw
             self.screen.fill((30, 30, 30))
@@ -453,6 +568,7 @@ class GameEngine:
             self.left_paddle.draw(self.screen)
             self.right_paddle.draw(self.screen)
             self.ball.draw(self.screen)
+            self._draw_serve_arrow()
             self._draw_hud()
 
             # Dessiner un fond de footer semi-transparent sur toute la largeur

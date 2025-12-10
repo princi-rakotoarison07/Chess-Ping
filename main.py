@@ -3,6 +3,7 @@ import pygame
 import config
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from game.ui.pre_game_config import PreGameConfigScreen
+from game.ui.serve_choice import ServeChoiceScreen
 
 
 def main():
@@ -24,10 +25,14 @@ def main():
     config.LEFT_AREA_X = config.BOARD_LEFT - 200
     config.RIGHT_AREA_X = config.BOARD_LEFT + config.BOARD_WIDTH + 200
 
+    # Écran de choix du premier serveur (gauche/droite)
+    serve_choice_screen = ServeChoiceScreen(screen)
+    first_server = serve_choice_screen.run()  # "left" pour Blancs, "right" pour Noirs
+
     # Importer GameEngine après la configuration du plateau pour qu'il lise les bons paramètres
     from game.engine import GameEngine
 
-    engine = GameEngine(screen, setup_config=setup)
+    engine = GameEngine(screen, setup_config=setup, first_server=first_server)
     engine.game_loop()
 
     pygame.quit()
