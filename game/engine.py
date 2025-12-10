@@ -20,6 +20,7 @@ from config import (
     BALL_SPEED_X,
     BALL_SPEED_Y,
 )
+from game.net.connection import send_json, recv_json
 from game.chess.board import ChessBoard
 from game.chess.piece import Piece
 from game.pingpong.ball import Ball
@@ -28,13 +29,24 @@ from game.ui.config_panel import ConfigPanel
 
 
 class GameEngine:
-    def __init__(self, screen: pygame.Surface, setup_config: Dict | None = None, first_server: str = "left"):
+    def __init__(
+        self,
+        screen: pygame.Surface,
+        setup_config: Dict | None = None,
+        first_server: str = "left",
+        net_role: str = "local",  # "local", "server", "client"
+        net_socket=None,
+    ):
         self.screen = screen
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(DEFAULT_FONT_NAME, 22)
 
         self.setup_config = setup_config
         self.first_server = first_server  # "left" (Blancs) ou "right" (Noirs)
+
+        # Réseau
+        self.net_role = net_role
+        self.net_socket = net_socket
 
         self.pieces_left, self.pieces_right = self._create_pieces()
         self.board = ChessBoard(self.pieces_left, self.pieces_right)
@@ -187,6 +199,73 @@ class GameEngine:
         self.ball.vx = math.cos(self.serve_angle) * speed
         self.ball.vy = math.sin(self.serve_angle) * speed
         self.serving = False
+
+    def _net_send_state(self):
+        """Envoie l'état minimal de la partie au client (mode serveur)."""
+        if self.net_role != "server" or self.net_socket is None:
+            return
+        state = {
+            "type": "state",
+            "ball": {
+                "x": self.ball.x,
+                "y": self.ball.y,
+                "vx": self.ball.vx,
+                "vy": self.ball.vy,
+            },
+            "paddles": {
+                "left": {"y": self.left_paddle.rect.y},
+                "right": {"y": self.right_paddle.rect.y},
+            },
+            "scores": {"left": self.score_left, "right": self.score_right},
+            "serving": self.serving,
+            "serve_angle": self.serve_angle,
+            "server_side": self.server_side,
+        }
+        try:
+            send_json(self.net_socket, state)
+        except Exception:
+            # Si l'envoi échoue, on reste en mode local côté serveur
+            self.net_socket = None
+            self.net_role = "local"
+
+    def _net_client_receive_state(self):
+        """Reçoit un état depuis le serveur et met à jour l'affichage (mode client)."""
+        if self.net_role != "client" or self.net_socket is None:
+            return
+        try:
+            msg = recv_json(self.net_socket)
+        except Exception:
+            msg = None
+        if not msg or msg.get("type") != "state":
+            return
+
+        ball = msg.get("ball", {})
+        paddles = msg.get("paddles", {})
+        scores = msg.get("scores", {})
+
+        # Balle
+        self.ball.x = ball.get("x", self.ball.x)
+        self.ball.y = ball.get("y", self.ball.y)
+        self.ball.vx = ball.get("vx", self.ball.vx)
+        self.ball.vy = ball.get("vy", self.ball.vy)
+        self.ball.rect.center = (int(self.ball.x), int(self.ball.y))
+
+        # Paddles
+        left = paddles.get("left", {})
+        right = paddles.get("right", {})
+        if "y" in left:
+            self.left_paddle.rect.y = left["y"]
+        if "y" in right:
+            self.right_paddle.rect.y = right["y"]
+
+        # Scores
+        self.score_left = scores.get("left", self.score_left)
+        self.score_right = scores.get("right", self.score_right)
+
+        # Service
+        self.serving = msg.get("serving", self.serving)
+        self.serve_angle = msg.get("serve_angle", self.serve_angle)
+        self.server_side = msg.get("server_side", self.server_side)
 
     def _apply_ball_speed_factor(self):
         """Réapplique le facteur de vitesse à la balle en mouvement."""
@@ -476,6 +555,10 @@ class GameEngine:
             print(f"Erreur lors de la sauvegarde: {e}")
 
     def _handle_collisions(self):
+        # En mode client réseau, aucune collision n'est gérée en local
+        if self.net_role == "client":
+            return
+
         # Pendant le service, on ne gère pas les collisions (la balle est attachée)
         if self.serving:
             return
@@ -594,21 +677,23 @@ class GameEngine:
                 if event.type == pygame.QUIT:
                     running = False
                 
-                # Gérer les événements des panneaux de configuration
-                self.white_config_panel.handle_event(event)
-                self.dark_config_panel.handle_event(event)
+                # Gérer les événements des panneaux de configuration (uniquement local/serveur)
+                if self.net_role in ("local", "server"):
+                    self.white_config_panel.handle_event(event)
+                    self.dark_config_panel.handle_event(event)
 
-                # Gestion des boutons de vitesse de balle
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if self._speed_minus_rect.collidepoint(event.pos):
-                        self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
-                        self._apply_ball_speed_factor()
-                    elif self._speed_plus_rect.collidepoint(event.pos):
-                        self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
-                        self._apply_ball_speed_factor()
+                # Gestion des boutons de vitesse de balle (seulement côté local/serveur)
+                if self.net_role in ("local", "server"):
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        if self._speed_minus_rect.collidepoint(event.pos):
+                            self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
+                            self._apply_ball_speed_factor()
+                        elif self._speed_plus_rect.collidepoint(event.pos):
+                            self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
+                            self._apply_ball_speed_factor()
 
-                # Lancement manuel de la balle
-                if self.serving:
+                # Lancement manuel de la balle (uniquement côté local/serveur)
+                if self.net_role in ("local", "server") and self.serving:
                     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         self._launch_ball()
                     if event.type == pygame.KEYDOWN and event.key in (pygame.K_SPACE, pygame.K_RETURN):
@@ -617,13 +702,21 @@ class GameEngine:
             keys = pygame.key.get_pressed()
 
             # update
-            self.left_paddle.update(keys)
-            self.right_paddle.update(keys)
-            if self.serving:
-                self._update_serve()
+            if self.net_role == "client":
+                # Le client ne fait que recevoir l'état du serveur
+                self._net_client_receive_state()
             else:
-                self.ball.update()
-                self._handle_collisions()
+                self.left_paddle.update(keys)
+                self.right_paddle.update(keys)
+                if self.serving:
+                    self._update_serve()
+                else:
+                    self.ball.update()
+                    self._handle_collisions()
+
+                # En mode serveur, envoyer l'état actuel au client
+                if self.net_role == "server":
+                    self._net_send_state()
 
             # draw
             self.screen.fill((30, 30, 30))

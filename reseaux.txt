@@ -1,0 +1,4 @@
+Les étapes :
+Squelette réseau : connexion + échange de config
+Synchro minimale en temps réel
+Synchro des pièces, vies et règles complètes
