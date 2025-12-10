@@ -47,6 +47,14 @@ class GameEngine:
         self.serve_angle = 0.0
         self._reset_ball_for_serve()
 
+        # Configuration dynamique de la vitesse de balle
+        self.ball_speed_factor = 1.0
+        self.ball_speed_min = 0.5
+        self.ball_speed_max = 2.0
+        # Boutons +/- affichés dans le HUD (positions définies plus bas dans _draw_hud)
+        self._speed_minus_rect = pygame.Rect(0, 0, 24, 24)
+        self._speed_plus_rect = pygame.Rect(0, 0, 24, 24)
+
         # Mémorise la dernière pièce touchée pour éviter plusieurs hits tant que la balle reste en contact
         self.last_hit_piece = None
 
@@ -174,10 +182,25 @@ class GameEngine:
         """Lance la balle dans la direction courante de la flèche."""
         if not self.serving:
             return
-        speed = math.hypot(BALL_SPEED_X, BALL_SPEED_Y)
+        base = math.hypot(BALL_SPEED_X, BALL_SPEED_Y)
+        speed = base * self.ball_speed_factor
         self.ball.vx = math.cos(self.serve_angle) * speed
         self.ball.vy = math.sin(self.serve_angle) * speed
         self.serving = False
+
+    def _apply_ball_speed_factor(self):
+        """Réapplique le facteur de vitesse à la balle en mouvement."""
+        if self.serving:
+            # la vitesse sera appliquée au moment du service
+            return
+        # Si la balle est immobile, rien à faire
+        if self.ball.vx == 0 and self.ball.vy == 0:
+            return
+        angle = math.atan2(self.ball.vy, self.ball.vx)
+        base = math.hypot(BALL_SPEED_X, BALL_SPEED_Y)
+        speed = base * self.ball_speed_factor
+        self.ball.vx = math.cos(angle) * speed
+        self.ball.vy = math.sin(angle) * speed
 
     def _create_pieces(self) -> Tuple[List[Piece], List[Piece]]:
         """Crée les pièces pour les deux camps.
@@ -525,10 +548,42 @@ class GameEngine:
         # La balle reste confinée dans le plateau : pas de reset basé sur les bords de la fenêtre
 
     def _draw_hud(self):
+        # Infos de base (gauche)
         text = f"Pieces L:{len(self.pieces_left)}  R:{len(self.pieces_right)}  Score L:{self.score_left} R:{self.score_right}"
         surface = self.font.render(text, True, (255, 255, 255))
-        # Remonter le HUD pour réduire la hauteur du header
         self.screen.blit(surface, (20, 10))
+
+        # Contrôle de vitesse de balle (en haut à droite)
+        speed_label = f"Vitesse: x{self.ball_speed_factor:.1f}"
+        label_surf = self.font.render(speed_label, True, (255, 255, 255))
+        padding = 10
+        btn_size = 20
+        spacing = 4
+
+        # Largeur totale (texte + 2 boutons + espaces) pour rester à l'intérieur de l'écran
+        total_width = label_surf.get_width() + spacing + btn_size + spacing + btn_size
+        x = SCREEN_WIDTH - padding - total_width
+        y = 10
+        self.screen.blit(label_surf, (x, y))
+
+        # Boutons - et + à droite du texte
+        minus_x = x + label_surf.get_width() + spacing
+        plus_x = minus_x + btn_size + spacing
+        btn_y = y
+
+        self._speed_minus_rect.update(minus_x, btn_y, btn_size, btn_size)
+        self._speed_plus_rect.update(plus_x, btn_y, btn_size, btn_size)
+
+        # Dessin des boutons
+        pygame.draw.rect(self.screen, (60, 60, 90), self._speed_minus_rect)
+        pygame.draw.rect(self.screen, (200, 200, 220), self._speed_minus_rect, 1)
+        minus_txt = self.font.render("-", True, (255, 255, 255))
+        self.screen.blit(minus_txt, minus_txt.get_rect(center=self._speed_minus_rect.center))
+
+        pygame.draw.rect(self.screen, (60, 60, 90), self._speed_plus_rect)
+        pygame.draw.rect(self.screen, (200, 200, 220), self._speed_plus_rect, 1)
+        plus_txt = self.font.render("+", True, (255, 255, 255))
+        self.screen.blit(plus_txt, plus_txt.get_rect(center=self._speed_plus_rect.center))
 
 
     def game_loop(self):
@@ -542,6 +597,15 @@ class GameEngine:
                 # Gérer les événements des panneaux de configuration
                 self.white_config_panel.handle_event(event)
                 self.dark_config_panel.handle_event(event)
+
+                # Gestion des boutons de vitesse de balle
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self._speed_minus_rect.collidepoint(event.pos):
+                        self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
+                        self._apply_ball_speed_factor()
+                    elif self._speed_plus_rect.collidepoint(event.pos):
+                        self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
+                        self._apply_ball_speed_factor()
 
                 # Lancement manuel de la balle
                 if self.serving:
