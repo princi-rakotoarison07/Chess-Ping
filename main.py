@@ -25,9 +25,9 @@ def main():
     config.LEFT_AREA_X = config.BOARD_LEFT - 200
     config.RIGHT_AREA_X = config.BOARD_LEFT + config.BOARD_WIDTH + 200
 
-    # Choix du joueur qui commence avec la balle
+    # Écran de choix du premier serveur (gauche/droite)
     serve_choice_screen = ServeChoiceScreen(screen)
-    first_server = serve_choice_screen.run()  # "white" ou "dark"
+    first_server = serve_choice_screen.run()  # "left" pour Blancs, "right" pour Noirs
 
     # Importer GameEngine après la configuration du plateau pour qu'il lise les bons paramètres
     from game.engine import GameEngine
