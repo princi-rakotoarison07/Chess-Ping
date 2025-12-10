@@ -1,27 +1,26 @@
 import pygame
-from typing import Dict, List, Callable
+from typing import Dict, Callable, List
 from utils.loader import load_image
 from config import PIECE_LIFE
 
 
 class ConfigPanel:
-    """Panneau de configuration pour modifier les vies des pièces - Affichage horizontal."""
+    """Panneau de configuration horizontal et transparent pour modifier les vies des pièces."""
     
-    def __init__(self, x: int, y: int, width: int, title: str, color_prefix: str):
+    def __init__(self, x: int, y: int, title: str, color_prefix: str, width: int | None = None):
         """
         Args:
-            x, y: Position du panneau
-            width: Largeur du panneau
+            x, y: Position du panneau (coin supérieur gauche)
             title: Titre du panneau ("Blancs" ou "Noirs")
             color_prefix: "white" ou "dark" pour charger les bonnes images
         """
         self.x = x
         self.y = y
-        self.width = width
         self.title = title
         self.color_prefix = color_prefix
+        self.width = width
         
-        # Types de pièces dans l'ordre d'affichage
+        # Types de pièces dans l'ordre d'affichage (avec le roi)
         self.piece_types = ["pawn", "rook", "knight", "bishop", "queen", "king"]
         
         # Valeurs actuelles de configuration (copiées depuis PIECE_LIFE)
@@ -34,83 +33,68 @@ class ConfigPanel:
         self.input_values: Dict[str, str] = {k: str(v) for k, v in self.piece_values.items()}
         self.active_input: str = None  # Type de pièce dont l'input est actif
         
+        # Liste des pièces du joueur (sera définie depuis l'extérieur)
+        self.pieces_list: List = []
+        
         # Charger les images des pièces
         self.piece_images: Dict[str, pygame.Surface] = {}
         for piece_type in self.piece_types:
             filename = f"{piece_type.capitalize()}_{self.color_prefix.capitalize()}.png"
-            image = load_image(filename, fallback_rect_size=(35, 35))
-            # Redimensionner à une taille uniforme pour l'affichage
-            self.piece_images[piece_type] = pygame.transform.scale(image, (35, 35))
+            image = load_image(filename, fallback_rect_size=(40, 40))
+            # Redimensionner à une taille agrandi pour l'affichage horizontal
+            self.piece_images[piece_type] = pygame.transform.scale(image, (40, 40))
         
-        # Dimensions horizontales
-        self.piece_item_width = 100  # Largeur de chaque item de pièce
-        self.padding = 8
-        self.spacing = 5  # Espacement entre les éléments
-        self.input_width = 45
-        self.input_height = 25
+        # Dimensions pour layout horizontal (espace agrandi pour utiliser tout le footer)
+        self.piece_item_width = 100  # Largeur de chaque colonne de pièce (très agrandi)
+        self.piece_icon_size = 40
+        self.padding = 15
+        self.input_width = 60
+        self.input_height = 28
+        self.title_height = 30
         
         # Couleurs (fond transparent)
-        self.bg_color = None  # Pas de fond
         self.title_color = (255, 255, 255)
         self.text_color = (220, 220, 220)
-        self.input_bg_color = (40, 40, 50, 200)  # Semi-transparent
-        self.input_active_color = (60, 100, 140, 220)
-        self.button_color = (70, 130, 180, 200)
-        self.button_hover_color = (100, 160, 210, 220)
-        self.border_color = None  # Pas de bordure
+        self.input_bg_color = (40, 40, 50, 180)  # Semi-transparent
+        self.input_active_color = (70, 70, 90, 200)
+        self.border_color = (150, 150, 170)
         
         # Police
         pygame.font.init()
-        self.title_font = pygame.font.Font(None, 20)
+        self.title_font = pygame.font.Font(None, 22)
         self.label_font = pygame.font.Font(None, 16)
         self.input_font = pygame.font.Font(None, 18)
-        
-        # Calcul de la hauteur totale
-        self.total_height = 95  # Hauteur fixe pour le layout horizontal
-        
-        # Boutons (disposés horizontalement sous les pièces)
-        self.button_height = 28
-        button_total_width = self.piece_item_width * len(self.piece_types)
-        button_width = (button_total_width - self.spacing * 2) // 3
-        
-        button_y = self.y + self.total_height - self.button_height - 5
-        
-        self.apply_button_rect = pygame.Rect(
-            self.x,
-            button_y,
-            button_width,
-            self.button_height
-        )
-        self.reset_button_rect = pygame.Rect(
-            self.x + button_width + self.spacing,
-            button_y,
-            button_width,
-            self.button_height
-        )
-        self.save_button_rect = pygame.Rect(
-            self.x + button_width * 2 + self.spacing * 2,
-            button_y,
-            button_width,
-            self.button_height
-        )
+
+        # Adapter dynamiquement la largeur des colonnes de pièces si une largeur fixe est fournie
+        if self.width is not None:
+            available_width = max(0, self.width - self.padding * 2)
+            if self.piece_types:
+                self.piece_item_width = max(60, available_width // len(self.piece_types))
+                # Réduire légèrement la taille des icônes si nécessaire
+                max_icon_size = int(self.piece_item_width * 0.8)
+                if max_icon_size < self.piece_icon_size:
+                    self.piece_icon_size = max(24, max_icon_size)
         
         # Callbacks
         self.on_apply: Callable[[Dict[str, int]], None] = None
         self.on_reset: Callable[[], None] = None
         self.on_save: Callable[[Dict[str, int]], None] = None
         
-        # État des boutons
-        self.hovered_button = None
-        
+    def get_width(self) -> int:
+        """Retourne la largeur totale du panneau."""
+        if self.width is not None:
+            return self.width
+        return len(self.piece_types) * self.piece_item_width + self.padding * 2
+    
     def get_height(self) -> int:
         """Retourne la hauteur totale du panneau."""
-        return self.total_height
+        return self.title_height + self.piece_icon_size + 25 + self.input_height + self.padding * 3
     
     def get_input_rect(self, piece_type: str) -> pygame.Rect:
-        """Retourne le rectangle du champ input pour un type de pièce (layout horizontal)."""
+        """Retourne le rectangle du champ input pour un type de pièce."""
         idx = self.piece_types.index(piece_type)
-        x = self.x + idx * self.piece_item_width + (self.piece_item_width - self.input_width) // 2
-        y = self.y + 60  # Position fixe sous l'image et la vie
+        x = self.x + self.padding + idx * self.piece_item_width + (self.piece_item_width - self.input_width) // 2
+        y = self.y + self.title_height + self.piece_icon_size + 25 + self.padding
         return pygame.Rect(x, y, self.input_width, self.input_height)
     
     def handle_event(self, event: pygame.event.Event) -> bool:
@@ -120,17 +104,6 @@ class ConfigPanel:
         """
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = event.pos
-            
-            # Vérifier les clics sur les boutons
-            if self.apply_button_rect.collidepoint(mouse_pos):
-                self._apply_changes()
-                return True
-            elif self.reset_button_rect.collidepoint(mouse_pos):
-                self._reset_values()
-                return True
-            elif self.save_button_rect.collidepoint(mouse_pos):
-                self._save_config()
-                return True
             
             # Vérifier les clics sur les inputs
             for piece_type in self.piece_types:
@@ -164,17 +137,6 @@ class ConfigPanel:
                     if len(current) < 3:  # Limiter à 3 chiffres
                         self.input_values[self.active_input] += event.unicode
                     return True
-        
-        elif event.type == pygame.MOUSEMOTION:
-            mouse_pos = event.pos
-            if self.apply_button_rect.collidepoint(mouse_pos):
-                self.hovered_button = "apply"
-            elif self.reset_button_rect.collidepoint(mouse_pos):
-                self.hovered_button = "reset"
-            elif self.save_button_rect.collidepoint(mouse_pos):
-                self.hovered_button = "save"
-            else:
-                self.hovered_button = None
         
         return False
     
@@ -219,50 +181,51 @@ class ConfigPanel:
         if self.on_save:
             self.on_save(self.piece_values.copy())
     
+    def get_total_life_by_type(self, piece_type: str) -> int:
+        """Calcule la somme totale des vies de toutes les pièces d'un type donné."""
+        total = 0
+        for piece in self.pieces_list:
+            if piece.alive and piece.kind == piece_type:
+                total += piece.life
+        return total
+    
     def draw(self, surface: pygame.Surface):
-        """Dessine le panneau de configuration."""
-        panel_height = self.get_height()
+        """Dessine le panneau de configuration (fond transparent, layout horizontal)."""
         
-        # Fond du panneau avec bordure
-        panel_rect = pygame.Rect(self.x, self.y, self.width, panel_height)
-        pygame.draw.rect(surface, self.bg_color, panel_rect)
-        pygame.draw.rect(surface, self.border_color, panel_rect, 2)
-        
-        # Titre
+        # Titre minimaliste (sans encadrement)
         title_surface = self.title_font.render(self.title, True, self.title_color)
-        title_rect = title_surface.get_rect(centerx=self.x + self.width // 2, top=self.y + self.padding)
+        title_rect = title_surface.get_rect(centerx=self.x + self.get_width() // 2, top=self.y)
         surface.blit(title_surface, title_rect)
         
-        # Ligne de séparation
-        pygame.draw.line(
-            surface,
-            self.border_color,
-            (self.x + self.padding, self.y + 35),
-            (self.x + self.width - self.padding, self.y + 35),
-            1
-        )
-        
-        # Dessiner chaque item de pièce
+        # Dessiner chaque pièce en colonne horizontale
         for idx, piece_type in enumerate(self.piece_types):
-            item_y = self.y + 40 + idx * self.piece_item_height
+            item_x = self.x + self.padding + idx * self.piece_item_width
             
-            # Image de la pièce
+            # Image de la pièce (centrée dans sa colonne)
             image = self.piece_images[piece_type]
-            image_rect = image.get_rect(left=self.x + self.padding, centery=item_y + self.piece_item_height // 2 - 10)
-            surface.blit(image, image_rect)
+            image_x = item_x + (self.piece_item_width - self.piece_icon_size) // 2
+            image_y = self.y + self.title_height + self.padding
+            surface.blit(image, (image_x, image_y))
             
-            # Vie actuelle
-            life_text = f"Vie: {self.piece_values[piece_type]}"
+            # Somme totale des vies de toutes les pièces de ce type (en dessous de l'icône)
+            total_life = self.get_total_life_by_type(piece_type)
+            life_text = f"{total_life}"
             life_surface = self.label_font.render(life_text, True, self.text_color)
-            life_rect = life_surface.get_rect(left=self.x + self.padding + 50, centery=item_y + self.piece_item_height // 2 - 10)
-            surface.blit(life_surface, life_rect)
+            life_x = item_x + (self.piece_item_width - life_surface.get_width()) // 2
+            life_y = image_y + self.piece_icon_size + 2
+            surface.blit(life_surface, (life_x, life_y))
             
-            # Champ input
+            # Champ input (en dessous du texte de vie)
             input_rect = self.get_input_rect(piece_type)
             is_active = (self.active_input == piece_type)
-            input_color = self.input_active_color if is_active else self.input_bg_color
             
-            pygame.draw.rect(surface, input_color, input_rect)
+            # Créer une surface semi-transparente pour l'input
+            input_surface_bg = pygame.Surface((input_rect.width, input_rect.height), pygame.SRCALPHA)
+            input_color = self.input_active_color if is_active else self.input_bg_color
+            input_surface_bg.fill(input_color)
+            surface.blit(input_surface_bg, input_rect.topleft)
+            
+            # Bordure de l'input
             pygame.draw.rect(surface, self.border_color, input_rect, 2 if is_active else 1)
             
             # Texte de l'input
@@ -270,23 +233,6 @@ class ConfigPanel:
             if is_active:
                 input_text += "|"  # Curseur clignotant
             
-            input_surface = self.input_font.render(input_text, True, self.text_color)
-            input_text_rect = input_surface.get_rect(center=input_rect.center)
-            surface.blit(input_surface, input_text_rect)
-        
-        # Dessiner les boutons
-        self._draw_button(surface, self.apply_button_rect, "Appliquer", "apply")
-        self._draw_button(surface, self.reset_button_rect, "Réinitialiser", "reset")
-        self._draw_button(surface, self.save_button_rect, "Sauvegarder", "save")
-    
-    def _draw_button(self, surface: pygame.Surface, rect: pygame.Rect, text: str, button_id: str):
-        """Dessine un bouton."""
-        is_hovered = (self.hovered_button == button_id)
-        color = self.button_hover_color if is_hovered else self.button_color
-        
-        pygame.draw.rect(surface, color, rect, border_radius=5)
-        pygame.draw.rect(surface, self.border_color, rect, 2, border_radius=5)
-        
-        text_surface = self.label_font.render(text, True, self.title_color)
-        text_rect = text_surface.get_rect(center=rect.center)
-        surface.blit(text_surface, text_rect)
+            input_text_surface = self.input_font.render(input_text, True, self.text_color)
+            input_text_rect = input_text_surface.get_rect(center=input_rect.center)
+            surface.blit(input_text_surface, input_text_rect)

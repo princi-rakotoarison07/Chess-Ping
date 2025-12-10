@@ -1,8 +1,8 @@
 import pygame
 
 # Fenêtre
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
+SCREEN_WIDTH = 1224
+SCREEN_HEIGHT = 1000
 FPS = 60
 
 # Couleurs
@@ -13,7 +13,7 @@ GREEN = (0, 200, 0)
 RED = (200, 0, 0)
 
 # Plateau d'échecs (grille 8x8)
-BOARD_ROWS = 8
+BOARD_ROWS = 2
 BOARD_COLS = 8
 CELL_SIZE = 80  # taille d'une case (modifiable)
 BOARD_WIDTH = CELL_SIZE * BOARD_COLS

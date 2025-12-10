@@ -13,8 +13,3 @@ Modularité du code pour ajouter facilement de nouvelles pièces et règles
 py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install pygame-ce
-
-
-Ajouter la configuration dans l'interface Chess-Ping pour permettre de modifier dynamiquement les vies de chaque type de pièce d'échecs par joueurs (blanc et noir).elle doit être affiché sur le côté en bas de la fenêtre . Pour chaque type de pièce (pawn, rook, knight, bishop, queen, king), il faut afficher l'image de la pièce, sa vie actuelle, et un champ input en bas permettant de saisir une nouvelle valeur numérique. Lorsque l'utilisateur modifie une valeur et appuie sur Entrée ou clique sur un bouton 'Appliquer', les vies de toutes les pièces de ce type doivent être mises à jour instantanément sur le plateau. Iinclure des boutons pour réinitialiser les valeurs par défaut et pour sauvegarder la configuration actuelle. L'interface doit rester responsive et intuitive, avec des labels clairs affichant l'icône de chaque pièce à côté de son champ de configuration."
-
-chaque joueurs a de configuration de leurs pieces, pas besoin de context comme pion, roi mais juste presentation par image comme le jeu en utilisant le @assets/png
