@@ -3,7 +3,6 @@ import pygame
 import config
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 from game.ui.pre_game_config import PreGameConfigScreen
-from game.ui.serve_choice import ServeChoiceScreen
 
 
 def main():
@@ -25,14 +24,10 @@ def main():
     config.LEFT_AREA_X = config.BOARD_LEFT - 200
     config.RIGHT_AREA_X = config.BOARD_LEFT + config.BOARD_WIDTH + 200
 
-    # Choix du joueur qui commence avec la balle
-    serve_choice_screen = ServeChoiceScreen(screen)
-    first_server = serve_choice_screen.run()  # "white" ou "dark"
-
     # Importer GameEngine après la configuration du plateau pour qu'il lise les bons paramètres
     from game.engine import GameEngine
 
-    engine = GameEngine(screen, setup_config=setup, first_server=first_server)
+    engine = GameEngine(screen, setup_config=setup)
     engine.game_loop()
 
     pygame.quit()
