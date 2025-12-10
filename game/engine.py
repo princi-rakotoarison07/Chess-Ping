@@ -96,13 +96,11 @@ class GameEngine:
         right_cols = [BOARD_COLS - 1, BOARD_COLS - 2]
 
         def add_pieces_for_color(color: str, cols: List[int], target_list: List[Piece]):
-            """Place les pièces pour une couleur en remplissant les colonnes.
+            """Place les pièces d'une couleur selon la taille du plateau.
 
-            - cols[0] : colonne back-rank (pièces lourdes / royales)
-            - cols[1] : colonne de pions
-
-            Remplissage de bas en haut pour respecter un alignement gauche/droite
-            (et non haut/bas), avec un motif de back-rank inspiré des échecs.
+            - Si BOARD_ROWS == 8 : placement classique d'échecs (back-rank + pions).
+            - Si BOARD_ROWS < 8 : placement compact stratégique basé sur les nombres
+              configurés (tours en avant, roi+reine derrière, puis autres pièces).
             """
 
             if not self.setup_config:
@@ -111,75 +109,38 @@ class GameEngine:
             color_key = "white" if color == "white" else "dark"
             config_for_color = self.setup_config.get(color_key, {})
 
-            # Compteurs restants par type
-            remaining: Dict[str, int] = {}
-            for kind in ["rook", "knight", "bishop", "queen", "king", "pawn"]:
-                data_kind = config_for_color.get(kind, {"count": 0})
-                remaining[kind] = int(data_kind.get("count", 0))
+            back_col, front_col = cols[0], cols[1]
 
-            back_col, pawn_col = cols[0], cols[1]
+            # --- Cas 1 : plateau complet 8x8 -> placement standard ---
+            if BOARD_ROWS == 8:
+                # Compteurs restants par type (on respecte les quantités configurées)
+                remaining: Dict[str, int] = {}
+                for kind in ["rook", "knight", "bishop", "queen", "king", "pawn"]:
+                    data_kind = config_for_color.get(kind, {"count": 0})
+                    remaining[kind] = int(data_kind.get("count", 0))
 
-            # Motif standard d'une back-rank d'échecs (tronqué à BOARD_ROWS)
-            full_back_pattern = [
-                "rook",
-                "knight",
-                "bishop",
-                "queen",
-                "king",
-                "bishop",
-                "knight",
-                "rook",
-            ]
-            back_pattern = full_back_pattern[:BOARD_ROWS]
+                # Back-rank classique
+                full_back_pattern = [
+                    "rook",
+                    "knight",
+                    "bishop",
+                    "queen",
+                    "king",
+                    "bishop",
+                    "knight",
+                    "rook",
+                ]
+                back_pattern = full_back_pattern[:BOARD_ROWS]
 
-            # 1) Placer les pièces de back-rank, de bas en haut
-            #    (rows décroit : BOARD_ROWS-1, ..., 0)
-            for i, row in enumerate(range(BOARD_ROWS - 1, -1, -1)):
-                if i >= len(back_pattern):
-                    break
-                desired_kind = back_pattern[i]
+                # Back-rank : de haut en bas (rows 0..7) sur la colonne arrière
+                for row, desired_kind in enumerate(back_pattern):
+                    if remaining.get(desired_kind, 0) <= 0:
+                        continue
+                    remaining[desired_kind] -= 1
+                    cx, cy = ChessBoard.get_square_center(row, back_col)
+                    piece = Piece(kind=desired_kind, color=color, position=(cx, cy))
 
-                # Si on n'a plus de cette pièce, on essaie une autre pièce non-pion
-                candidate_kind = None
-                if remaining.get(desired_kind, 0) > 0:
-                    candidate_kind = desired_kind
-                else:
-                    # ordre de repli: tours, cavaliers, fous, reine, roi (sans pions)
-                    fallback_order = ["rook", "knight", "bishop", "queen", "king"]
-                    for k in fallback_order:
-                        if remaining.get(k, 0) > 0:
-                            candidate_kind = k
-                            break
-
-                if not candidate_kind:
-                    continue
-
-                remaining[candidate_kind] -= 1
-                cx, cy = ChessBoard.get_square_center(row, back_col)
-                piece = Piece(kind=candidate_kind, color=color, position=(cx, cy))
-
-                # Appliquer la vie configurée pour ce type de pièce
-                data_kind = config_for_color.get(candidate_kind, {"life": piece.max_life})
-                life_value = int(data_kind.get("life", piece.max_life))
-                if life_value <= 0:
-                    life_value = 1
-                piece.max_life = life_value
-                piece.life = life_value
-
-                piece.row = row
-                piece.col = back_col
-                target_list.append(piece)
-
-            # 2) Placer les pions dans la colonne de pions, de bas en haut
-            pawn_remaining = remaining.get("pawn", 0)
-            if pawn_remaining > 0:
-                for row in range(BOARD_ROWS - 1, -1, -1):
-                    if pawn_remaining <= 0:
-                        break
-                    cx, cy = ChessBoard.get_square_center(row, pawn_col)
-                    piece = Piece(kind="pawn", color=color, position=(cx, cy))
-
-                    data_kind = config_for_color.get("pawn", {"life": piece.max_life})
+                    data_kind = config_for_color.get(desired_kind, {"life": piece.max_life})
                     life_value = int(data_kind.get("life", piece.max_life))
                     if life_value <= 0:
                         life_value = 1
@@ -187,8 +148,107 @@ class GameEngine:
                     piece.life = life_value
 
                     piece.row = row
-                    piece.col = pawn_col
+                    piece.col = back_col
                     target_list.append(piece)
+
+                # Pions : sur la colonne avant, toutes les lignes
+                pawn_remaining = remaining.get("pawn", 0)
+                if pawn_remaining > 0:
+                    for row in range(BOARD_ROWS):
+                        if pawn_remaining <= 0:
+                            break
+                        cx, cy = ChessBoard.get_square_center(row, front_col)
+                        piece = Piece(kind="pawn", color=color, position=(cx, cy))
+
+                        data_kind = config_for_color.get("pawn", {"life": piece.max_life})
+                        life_value = int(data_kind.get("life", piece.max_life))
+                        if life_value <= 0:
+                            life_value = 1
+                        piece.max_life = life_value
+                        piece.life = life_value
+
+                        piece.row = row
+                        piece.col = front_col
+                        target_list.append(piece)
+
+                return
+
+            # --- Cas 2 : plateau réduit (2, 4, 6 lignes) -> placement stratégique ---
+
+            # Compteurs restants par type (exactement ce que l'utilisateur a choisi)
+            remaining: Dict[str, int] = {}
+            for kind in ["rook", "queen", "king", "bishop", "knight", "pawn"]:
+                data_kind = config_for_color.get(kind, {"count": 0})
+                remaining[kind] = int(data_kind.get("count", 0))
+
+            # Orientation des lignes :
+            # - Blancs : du bas vers le haut
+            # - Noirs : du haut vers le bas
+            if color == "white":
+                back_rows = list(range(BOARD_ROWS - 1, -1, -1))
+                front_rows = list(range(BOARD_ROWS - 1, -1, -1))
+            else:
+                back_rows = list(range(0, BOARD_ROWS))
+                front_rows = list(range(0, BOARD_ROWS))
+
+            def create_piece(kind: str, row: int, col: int):
+                cx, cy = ChessBoard.get_square_center(row, col)
+                piece = Piece(kind=kind, color=color, position=(cx, cy))
+
+                data_kind = config_for_color.get(kind, {"life": piece.max_life})
+                life_value = int(data_kind.get("life", piece.max_life))
+                if life_value <= 0:
+                    life_value = 1
+                piece.max_life = life_value
+                piece.life = life_value
+
+                piece.row = row
+                piece.col = col
+                target_list.append(piece)
+
+            # 1) Tours en colonne avant (défense), en premier
+            for row in front_rows:
+                if remaining.get("rook", 0) <= 0:
+                    break
+                create_piece("rook", row, front_col)
+                remaining["rook"] -= 1
+
+            # 2) Roi puis Reine en colonne arrière
+            for kind in ["king", "queen"]:
+                for row in back_rows:
+                    if remaining.get(kind, 0) <= 0:
+                        break
+                    occupied = any((p.row == row and p.col == back_col) for p in target_list)
+                    if occupied:
+                        continue
+                    create_piece(kind, row, back_col)
+                    remaining[kind] -= 1
+                    break
+
+            # 3) Autres pièces (fous, cavaliers, pions) remplissent les cases restantes
+            other_order = ["bishop", "knight", "pawn"]
+
+            # D'abord sur la colonne avant
+            for kind in other_order:
+                for row in front_rows:
+                    if remaining.get(kind, 0) <= 0:
+                        break
+                    occupied = any((p.row == row and p.col == front_col) for p in target_list)
+                    if occupied:
+                        continue
+                    create_piece(kind, row, front_col)
+                    remaining[kind] -= 1
+
+            # Puis sur la colonne arrière
+            for kind in other_order:
+                for row in back_rows:
+                    if remaining.get(kind, 0) <= 0:
+                        break
+                    occupied = any((p.row == row and p.col == back_col) for p in target_list)
+                    if occupied:
+                        continue
+                    create_piece(kind, row, back_col)
+                    remaining[kind] -= 1
 
         add_pieces_for_color("white", left_cols, pieces_left)
         add_pieces_for_color("dark", right_cols, pieces_right)
