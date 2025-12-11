@@ -32,6 +32,7 @@ class GameEngine:
         self.screen = screen
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(DEFAULT_FONT_NAME, 22)
+        self.small_font = pygame.font.Font(DEFAULT_FONT_NAME, 18)
 
         self.setup_config = setup_config
         self.first_server = first_server  # "left" (Blancs) ou "right" (Noirs)
@@ -54,6 +55,11 @@ class GameEngine:
         # Boutons +/- affichés dans le HUD (positions définies plus bas dans _draw_hud)
         self._speed_minus_rect = pygame.Rect(0, 0, 24, 24)
         self._speed_plus_rect = pygame.Rect(0, 0, 24, 24)
+
+        # Boutons de gestion de partie (sauvegarder/charger/reset)
+        self._save_button_rect = pygame.Rect(0, 0, 110, 26)
+        self._load_button_rect = pygame.Rect(0, 0, 110, 26)
+        self._reset_button_rect = pygame.Rect(0, 0, 110, 26)
 
         # Mémorise la dernière pièce touchée pour éviter plusieurs hits tant que la balle reste en contact
         self.last_hit_piece = None
@@ -584,7 +590,187 @@ class GameEngine:
         pygame.draw.rect(self.screen, (200, 200, 220), self._speed_plus_rect, 1)
         plus_txt = self.font.render("+", True, (255, 255, 255))
         self.screen.blit(plus_txt, plus_txt.get_rect(center=self._speed_plus_rect.center))
+        # Boutons Sauver / Charger / Reset sous le score (zone en haut à gauche)
+        buttons_y = 10 + surface.get_height() + 6
+        btn_width = 95
+        btn_height = 22
+        btn_spacing = 10
+        start_x = 20
 
+        self._save_button_rect.update(start_x, buttons_y, btn_width, btn_height)
+        self._load_button_rect.update(start_x + btn_width + btn_spacing, buttons_y, btn_width, btn_height)
+        self._reset_button_rect.update(start_x + 2 * (btn_width + btn_spacing), buttons_y, btn_width, btn_height)
+
+        for rect, label in [
+            (self._save_button_rect, "save"),
+            (self._load_button_rect, "charger"),
+            #reinitialiser
+            (self._reset_button_rect, "avereno"),
+        ]:
+            pygame.draw.rect(self.screen, (40, 40, 70), rect)
+            pygame.draw.rect(self.screen, (200, 200, 220), rect, 1)
+            txt = self.small_font.render(label, True, (255, 255, 255))
+            self.screen.blit(txt, txt.get_rect(center=rect.center))
+
+
+    def _serialize_state(self) -> Dict:
+        pieces_left_data = [
+            {
+                "kind": p.kind,
+                "color": p.color,
+                "row": p.row,
+                "col": p.col,
+                "life": p.life,
+                "max_life": p.max_life,
+            }
+            for p in self.pieces_left
+        ]
+        pieces_right_data = [
+            {
+                "kind": p.kind,
+                "color": p.color,
+                "row": p.row,
+                "col": p.col,
+                "life": p.life,
+                "max_life": p.max_life,
+            }
+            for p in self.pieces_right
+        ]
+
+        state = {
+            "score_left": self.score_left,
+            "score_right": self.score_right,
+            "serving": self.serving,
+            "server_side": self.server_side,
+            "serve_angle": self.serve_angle,
+            "ball_speed_factor": self.ball_speed_factor,
+            "ball": {
+                "x": self.ball.x,
+                "y": self.ball.y,
+                "vx": self.ball.vx,
+                "vy": self.ball.vy,
+                "color": list(self.ball.color),
+            },
+            "left_paddle_y": self.left_paddle.rect.y,
+            "right_paddle_y": self.right_paddle.rect.y,
+            "pieces_left": pieces_left_data,
+            "pieces_right": pieces_right_data,
+        }
+        return state
+
+    def _apply_state(self, state: Dict):
+        from game.chess.board import ChessBoard
+        from game.chess.piece import Piece
+
+        pieces_left_data = state.get("pieces_left", [])
+        pieces_right_data = state.get("pieces_right", [])
+
+        new_pieces_left: List[Piece] = []
+        new_pieces_right: List[Piece] = []
+
+        for data in pieces_left_data:
+            row = int(data.get("row", 0))
+            col = int(data.get("col", 0))
+            cx, cy = ChessBoard.get_square_center(row, col)
+            piece = Piece(kind=data.get("kind"), color=data.get("color"), position=(cx, cy))
+            piece.row = row
+            piece.col = col
+            piece.max_life = int(data.get("max_life", piece.max_life))
+            piece.life = int(data.get("life", piece.max_life))
+            new_pieces_left.append(piece)
+
+        for data in pieces_right_data:
+            row = int(data.get("row", 0))
+            col = int(data.get("col", 0))
+            cx, cy = ChessBoard.get_square_center(row, col)
+            piece = Piece(kind=data.get("kind"), color=data.get("color"), position=(cx, cy))
+            piece.row = row
+            piece.col = col
+            piece.max_life = int(data.get("max_life", piece.max_life))
+            piece.life = int(data.get("life", piece.max_life))
+            new_pieces_right.append(piece)
+
+        self.pieces_left = new_pieces_left
+        self.pieces_right = new_pieces_right
+        self.board = ChessBoard(self.pieces_left, self.pieces_right)
+
+        ball_data = state.get("ball", {})
+        self.ball.x = float(ball_data.get("x", self.ball.x))
+        self.ball.y = float(ball_data.get("y", self.ball.y))
+        self.ball.vx = float(ball_data.get("vx", self.ball.vx))
+        self.ball.vy = float(ball_data.get("vy", self.ball.vy))
+        color = ball_data.get("color")
+        if isinstance(color, (list, tuple)) and len(color) == 3:
+            self.ball.color = tuple(color)
+        self.ball.rect.center = (int(self.ball.x), int(self.ball.y))
+
+        self.left_paddle.rect.y = int(state.get("left_paddle_y", self.left_paddle.rect.y))
+        self.right_paddle.rect.y = int(state.get("right_paddle_y", self.right_paddle.rect.y))
+
+        self.score_left = int(state.get("score_left", self.score_left))
+        self.score_right = int(state.get("score_right", self.score_right))
+        self.serving = bool(state.get("serving", self.serving))
+        self.server_side = state.get("server_side", self.server_side)
+        self.serve_angle = float(state.get("serve_angle", self.serve_angle))
+        self.ball_speed_factor = float(state.get("ball_speed_factor", self.ball_speed_factor))
+        self._apply_ball_speed_factor()
+
+        self.last_hit_piece = None
+
+        if hasattr(self, "_build_piece_indices"):
+            try:
+                self._build_piece_indices()
+            except Exception:
+                pass
+
+    def _save_game_state(self, path: str = "game_state.json"):
+        import json
+
+        try:
+            state = self._serialize_state()
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            print(f"Etat de jeu sauvegarde dans {path}")
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde de l'etat de jeu: {e}")
+
+    def _load_game_state(self, path: str = "game_state.json"):
+        import json
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            self._apply_state(state)
+            print(f"Etat de jeu charge depuis {path}")
+        except FileNotFoundError:
+            print(f"Fichier de sauvegarde introuvable: {path}")
+        except Exception as e:
+            print(f"Erreur lors du chargement de l'etat de jeu: {e}")
+
+    def _reset_game(self):
+        from game.chess.board import ChessBoard
+        from game.pingpong.ball import Ball
+
+        self.pieces_left, self.pieces_right = self._create_pieces()
+        self.board = ChessBoard(self.pieces_left, self.pieces_right)
+        self.ball = Ball()
+        self.left_paddle, self.right_paddle = self._create_paddles()
+
+        self.score_left = 0
+        self.score_right = 0
+        self.serving = True
+        self.server_side = self.first_server
+        self.serve_angle = 0.0
+        self._reset_ball_for_serve()
+        self.ball_speed_factor = 1.0
+        self._apply_ball_speed_factor()
+        self.last_hit_piece = None
+
+        if hasattr(self, "_build_piece_indices"):
+            try:
+                self._build_piece_indices()
+            except Exception:
+                pass
 
     def game_loop(self):
         running = True
@@ -606,6 +792,12 @@ class GameEngine:
                     elif self._speed_plus_rect.collidepoint(event.pos):
                         self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
                         self._apply_ball_speed_factor()
+                    elif self._save_button_rect.collidepoint(event.pos):
+                        self._save_game_state()
+                    elif self._load_button_rect.collidepoint(event.pos):
+                        self._load_game_state()
+                    elif self._reset_button_rect.collidepoint(event.pos):
+                        self._reset_game()
 
                 # Lancement manuel de la balle
                 if self.serving:

@@ -18,6 +18,16 @@ MSG_SERVE_START = "serve_start"
 MSG_SERVE_LAUNCH = "serve_launch"
 MSG_GAME_END = "game_end"
 
+# Requtes client -> serveur pour les actions de gestion de partie
+MSG_REQ_SAVE = "req_save"
+MSG_REQ_LOAD = "req_load"
+MSG_REQ_RESET = "req_reset"
+
+# Messages serveur -> client pour la synchronisation d'etat
+MSG_GAME_STATE = "game_state"
+MSG_RESET = "reset"
+MSG_SAVE_CONFIRMED = "save_confirmed"
+
 
 def make_config_message(
     setup: Dict,
@@ -150,3 +160,27 @@ def make_game_end_message(winner: str) -> Dict[str, Any]:
         "type": MSG_GAME_END,
         "winner": winner,
     }
+
+
+def make_req_save_message() -> Dict[str, Any]:
+    return {"type": MSG_REQ_SAVE}
+
+
+def make_req_load_message() -> Dict[str, Any]:
+    return {"type": MSG_REQ_LOAD}
+
+
+def make_req_reset_message() -> Dict[str, Any]:
+    return {"type": MSG_REQ_RESET}
+
+
+def make_game_state_message(state: Dict[str, Any]) -> Dict[str, Any]:
+    return {"type": MSG_GAME_STATE, "state": state}
+
+
+def make_reset_message() -> Dict[str, Any]:
+    return {"type": MSG_RESET}
+
+
+def make_save_confirmed_message() -> Dict[str, Any]:
+    return {"type": MSG_SAVE_CONFIRMED}

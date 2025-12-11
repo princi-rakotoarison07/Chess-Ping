@@ -124,6 +124,27 @@ class NetworkGameEngine(GameEngine):
                 # Le client a décidé de lancer la balle (si c'est son tour de servir)
                 # Pour l'instant, on laisse le serveur gérer le service
                 pass
+            elif msg_type == protocol.MSG_REQ_SAVE:
+                # Le client demande au serveur de sauvegarder la partie
+                self._save_game_state()
+                if self.server_conn:
+                    confirm = protocol.make_save_confirmed_message()
+                    self.server_conn.send_game_message(confirm)
+            elif msg_type == protocol.MSG_REQ_LOAD:
+                # Le client demande au serveur de charger la partie sauvegardée
+                self._load_game_state()
+                # Après chargement, envoyer l'état complet au client
+                if self.server_conn:
+                    state = self._serialize_state()
+                    msg_state = protocol.make_game_state_message(state)
+                    self.server_conn.send_game_message(msg_state)
+            elif msg_type == protocol.MSG_REQ_RESET:
+                # Le client demande la réinitialisation de la partie
+                self._reset_game()
+                # Informer le client de la réinitialisation (il recrée la partie localement)
+                if self.server_conn:
+                    reset_msg = protocol.make_reset_message()
+                    self.server_conn.send_game_message(reset_msg)
 
     def _recv_as_client(self):
         """Le client reçoit les mises à jour de la balle, du paddle adverse, etc."""
@@ -190,6 +211,17 @@ class NetworkGameEngine(GameEngine):
                 if isinstance(factor, (int, float)):
                     self.ball_speed_factor = float(factor)
                     self._apply_ball_speed_factor()
+            elif msg_type == protocol.MSG_GAME_STATE:
+                # Le serveur envoie un état complet à appliquer (par ex. après un load)
+                state = msg.get("state")
+                if isinstance(state, dict):
+                    self._apply_state(state)
+            elif msg_type == protocol.MSG_RESET:
+                # Le serveur indique de recréer la partie depuis la configuration initiale
+                self._reset_game()
+            elif msg_type == protocol.MSG_SAVE_CONFIRMED:
+                # Simple confirmation de sauvegarde reçue (pour debug/log)
+                print("Sauvegarde cote serveur confirmee")
 
     def _handle_collisions(self):
         """Override pour gérer les collisions différemment selon le mode réseau."""
@@ -325,19 +357,50 @@ class NetworkGameEngine(GameEngine):
                 # Gestion des boutons de vitesse de balle
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self._speed_minus_rect.collidepoint(event.pos):
-                        self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
-                        self._apply_ball_speed_factor()
-                        # Synchroniser la nouvelle vitesse côté serveur
+                        # La configuration de vitesse est contrôlée uniquement par le serveur
                         if self.network_mode == "server" and self.server_conn:
+                            self.ball_speed_factor = max(self.ball_speed_min, self.ball_speed_factor - 0.1)
+                            self._apply_ball_speed_factor()
                             msg = protocol.make_speed_update_message(self.ball_speed_factor)
                             self.server_conn.send_game_message(msg)
                     elif self._speed_plus_rect.collidepoint(event.pos):
-                        self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
-                        self._apply_ball_speed_factor()
-                        # Synchroniser la nouvelle vitesse côté serveur
+                        # La configuration de vitesse est contrôlée uniquement par le serveur
                         if self.network_mode == "server" and self.server_conn:
+                            self.ball_speed_factor = min(self.ball_speed_max, self.ball_speed_factor + 0.1)
+                            self._apply_ball_speed_factor()
                             msg = protocol.make_speed_update_message(self.ball_speed_factor)
                             self.server_conn.send_game_message(msg)
+                    elif self._save_button_rect.collidepoint(event.pos):
+                        if self.network_mode == "server" and self.server_conn:
+                            # Sauvegarde serveur + confirmation au client
+                            self._save_game_state()
+                            confirm = protocol.make_save_confirmed_message()
+                            self.server_conn.send_game_message(confirm)
+                        elif self.network_mode == "client" and self.client_conn:
+                            # Envoyer uniquement une requête de sauvegarde au serveur
+                            req = protocol.make_req_save_message()
+                            self.client_conn.send_game_message(req)
+                    elif self._load_button_rect.collidepoint(event.pos):
+                        if self.network_mode == "server" and self.server_conn:
+                            # Charger localement puis diffuser l'etat complet au client
+                            self._load_game_state()
+                            state = self._serialize_state()
+                            msg_state = protocol.make_game_state_message(state)
+                            self.server_conn.send_game_message(msg_state)
+                        elif self.network_mode == "client" and self.client_conn:
+                            # Envoyer une requête de load au serveur
+                            req = protocol.make_req_load_message()
+                            self.client_conn.send_game_message(req)
+                    elif self._reset_button_rect.collidepoint(event.pos):
+                        if self.network_mode == "server" and self.server_conn:
+                            # Reinitialiser la partie cote serveur puis notifier le client
+                            self._reset_game()
+                            reset_msg = protocol.make_reset_message()
+                            self.server_conn.send_game_message(reset_msg)
+                        elif self.network_mode == "client" and self.client_conn:
+                            # Envoyer une requête de reset au serveur
+                            req = protocol.make_req_reset_message()
+                            self.client_conn.send_game_message(req)
 
                 # Lancement manuel de la balle (seulement si c'est notre tour de servir)
                 if self.serving:

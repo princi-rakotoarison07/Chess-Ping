@@ -1,0 +1,73 @@
+{
+  "score_left": 2,
+  "score_right": 2,
+  "serving": false,
+  "server_side": "left",
+  "serve_angle": 0.0,
+  "ball_speed_factor": 1.0,
+  "ball": {
+    "x": 294.5657118183624,
+    "y": 267.8573976206603,
+    "vx": 6.205790509088515,
+    "vy": 1.5773915675275154,
+    "color": [
+      255,
+      0,
+      0
+    ]
+  },
+  "left_paddle_y": 250,
+  "right_paddle_y": 220,
+  "pieces_left": [
+    {
+      "kind": "rook",
+      "color": "white",
+      "row": 1,
+      "col": 1,
+      "life": 2,
+      "max_life": 2
+    },
+    {
+      "kind": "rook",
+      "color": "white",
+      "row": 0,
+      "col": 1,
+      "life": 2,
+      "max_life": 2
+    },
+    {
+      "kind": "queen",
+      "color": "white",
+      "row": 0,
+      "col": 0,
+      "life": 3,
+      "max_life": 3
+    }
+  ],
+  "pieces_right": [
+    {
+      "kind": "rook",
+      "color": "dark",
+      "row": 0,
+      "col": 6,
+      "life": 1,
+      "max_life": 2
+    },
+    {
+      "kind": "rook",
+      "color": "dark",
+      "row": 1,
+      "col": 6,
+      "life": 3,
+      "max_life": 2
+    },
+    {
+      "kind": "queen",
+      "color": "dark",
+      "row": 1,
+      "col": 7,
+      "life": 3,
+      "max_life": 3
+    }
+  ]
+}
