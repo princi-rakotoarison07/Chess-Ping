@@ -1,8 +1,8 @@
 import pygame
 
 # Fenêtre
-SCREEN_WIDTH = 1224
-SCREEN_HEIGHT = 1000
+SCREEN_WIDTH = 900
+SCREEN_HEIGHT = 600
 FPS = 60
 
 # Couleurs
