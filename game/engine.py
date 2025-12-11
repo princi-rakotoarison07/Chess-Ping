@@ -66,6 +66,9 @@ class GameEngine:
 
         self.score_left = 0
         self.score_right = 0
+
+        self.game_over = False
+        self.game_over_winner: str | None = None
         
         
         # Panneaux de configuration (footer) sur toute la largeur, sous le plateau
@@ -527,6 +530,9 @@ class GameEngine:
                     print(f"REMOVE LEFT {piece.color} {piece.kind} (life={after}), score_right={self.score_right + 1}")
                     self.pieces_left.remove(piece)
                     self.score_right += 1
+                    if piece.kind == "king":
+                        winner = "black" if piece.color == "white" else "white"
+                        self._trigger_game_over(winner)
                 self.last_hit_piece = piece
                 hit_handled = True
                 break
@@ -548,6 +554,9 @@ class GameEngine:
                         print(f"REMOVE RIGHT {piece.color} {piece.kind} (life={after}), score_left={self.score_left + 1}")
                         self.pieces_right.remove(piece)
                         self.score_left += 1
+                        if piece.kind == "king":
+                            winner = "white" if piece.color != "white" else "black"
+                            self._trigger_game_over(winner)
                     self.last_hit_piece = piece
                     break
 
@@ -613,6 +622,12 @@ class GameEngine:
             self.screen.blit(txt, txt.get_rect(center=rect.center))
 
 
+    def _trigger_game_over(self, winner_color: str):
+        if not self.game_over:
+            self.game_over = True
+            self.game_over_winner = winner_color
+
+
     def _serialize_state(self) -> Dict:
         pieces_left_data = [
             {
@@ -657,6 +672,80 @@ class GameEngine:
             "pieces_right": pieces_right_data,
         }
         return state
+
+    def _run_game_over_screen(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+
+        running = True
+        choice = None
+
+        btn_width = 220
+        btn_height = 60
+        spacing = 30
+
+        center_x = SCREEN_WIDTH // 2
+        center_y = SCREEN_HEIGHT // 2
+
+        rect_replay = pygame.Rect(0, 0, btn_width, btn_height)
+        rect_replay.center = (center_x, center_y + 40)
+
+        rect_menu = pygame.Rect(0, 0, btn_width, btn_height)
+        rect_menu.center = (center_x, rect_replay.bottom + spacing)
+
+        # Petit message dans la console aussi
+        if self.game_over_winner == "white":
+            print("Les Blancs ont gagné !")
+        elif self.game_over_winner == "black":
+            print("Les Noirs ont gagné !")
+
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    raise SystemExit
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if rect_replay.collidepoint(event.pos):
+                        choice = "replay"
+                        running = False
+                    elif rect_menu.collidepoint(event.pos):
+                        choice = "menu"
+                        running = False
+
+            self.screen.blit(overlay, (0, 0))
+
+            if self.game_over_winner == "white":
+                msg = "Les Blancs ont gagné !"
+            elif self.game_over_winner == "black":
+                msg = "Les Noirs ont gagné !"
+            else:
+                msg = "Fin de partie"
+
+            title_surf = self.font.render(msg, True, (255, 255, 255))
+            title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80))
+            self.screen.blit(title_surf, title_rect)
+
+            score_text = f"Score Blancs: {self.score_left}  Score Noirs: {self.score_right}"
+            score_surf = self.small_font.render(score_text, True, (230, 230, 230))
+            score_rect = score_surf.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30))
+            self.screen.blit(score_surf, score_rect)
+
+            pygame.draw.rect(self.screen, (60, 60, 120), rect_replay, border_radius=10)
+            pygame.draw.rect(self.screen, (200, 200, 240), rect_replay, 2, border_radius=10)
+            replay_label = self.small_font.render("Rejouer", True, (255, 255, 255))
+            self.screen.blit(replay_label, replay_label.get_rect(center=rect_replay.center))
+
+            pygame.draw.rect(self.screen, (60, 60, 120), rect_menu, border_radius=10)
+            pygame.draw.rect(self.screen, (200, 200, 240), rect_menu, 2, border_radius=10)
+            menu_label = self.small_font.render("Menu principal", True, (255, 255, 255))
+            self.screen.blit(menu_label, menu_label.get_rect(center=rect_menu.center))
+
+            pygame.display.flip()
+
+        self.game_over = False
+        winner = self.game_over_winner
+        self.game_over_winner = None
+        return choice or "menu", winner
 
     def _apply_state(self, state: Dict):
         from game.chess.board import ChessBoard
@@ -774,6 +863,7 @@ class GameEngine:
 
     def game_loop(self):
         running = True
+        result_choice = None
         while running:
             self.clock.tick(FPS)
             for event in pygame.event.get():
@@ -808,14 +898,16 @@ class GameEngine:
 
             keys = pygame.key.get_pressed()
 
-            # update
-            self.left_paddle.update(keys)
-            self.right_paddle.update(keys)
-            if self.serving:
-                self._update_serve()
+            if self.game_over:
+                running = False
             else:
-                self.ball.update()
-                self._handle_collisions()
+                self.left_paddle.update(keys)
+                self.right_paddle.update(keys)
+                if self.serving:
+                    self._update_serve()
+                else:
+                    self.ball.update()
+                    self._handle_collisions()
 
             # draw
             self.screen.fill((30, 30, 30))
@@ -839,4 +931,9 @@ class GameEngine:
             self.dark_config_panel.draw(self.screen)
 
             pygame.display.flip()
+
+        if self.game_over:
+            result_choice, _ = self._run_game_over_screen()
+
+        return result_choice
 

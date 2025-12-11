@@ -222,6 +222,10 @@ class NetworkGameEngine(GameEngine):
             elif msg_type == protocol.MSG_SAVE_CONFIRMED:
                 # Simple confirmation de sauvegarde reçue (pour debug/log)
                 print("Sauvegarde cote serveur confirmee")
+            elif msg_type == protocol.MSG_GAME_END:
+                winner = msg.get("winner")
+                if isinstance(winner, str):
+                    self._trigger_game_over(winner)
 
     def _handle_collisions(self):
         """Override pour gérer les collisions différemment selon le mode réseau."""
@@ -291,6 +295,11 @@ class NetworkGameEngine(GameEngine):
                         
                         score_msg = protocol.make_score_update_message(self.score_left, self.score_right)
                         self.server_conn.send_game_message(score_msg)
+                        if piece.kind == "king":
+                            winner_color = "black" if piece.color == "white" else "white"
+                            self._trigger_game_over(winner_color)
+                            end_msg = protocol.make_game_end_message(winner_color)
+                            self.server_conn.send_game_message(end_msg)
                     
                     # Reconstruire les indices
                     self._build_piece_indices()
@@ -330,6 +339,11 @@ class NetworkGameEngine(GameEngine):
                             
                             score_msg = protocol.make_score_update_message(self.score_left, self.score_right)
                             self.server_conn.send_game_message(score_msg)
+                            if piece.kind == "king":
+                                winner_color = "white" if piece.color != "white" else "black"
+                                self._trigger_game_over(winner_color)
+                                end_msg = protocol.make_game_end_message(winner_color)
+                                self.server_conn.send_game_message(end_msg)
                         
                         # Reconstruire les indices
                         self._build_piece_indices()
@@ -340,11 +354,15 @@ class NetworkGameEngine(GameEngine):
     def game_loop(self):
         """Boucle de jeu avec intégration réseau."""
         running = True
+        result_choice = None
         while running:
             self.clock.tick(60)  # FPS constant
             
             # Recevoir les mises à jour réseau
             self._recv_network_updates()
+            if self.game_over:
+                running = False
+                continue
             
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -464,3 +482,8 @@ class NetworkGameEngine(GameEngine):
             self.dark_config_panel.draw(self.screen)
 
             pygame.display.flip()
+
+        if self.game_over:
+            result_choice, _ = self._run_game_over_screen()
+
+        return result_choice

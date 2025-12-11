@@ -41,8 +41,11 @@ def main():
         # Importer GameEngine après la configuration du plateau pour qu'il lise les bons paramètres
         from game.engine import GameEngine
 
-        engine = GameEngine(screen, setup_config=setup, first_server=first_server)
-        engine.game_loop()
+        while True:
+            engine = GameEngine(screen, setup_config=setup, first_server=first_server)
+            result = engine.game_loop()
+            if result != "replay":
+                break
 
 
     elif mode == "server":
@@ -126,16 +129,19 @@ def main():
         # Utiliser NetworkGameEngine pour le mode multijoueur
         from game.network_engine import NetworkGameEngine
 
-        engine = NetworkGameEngine(
-            screen,
-            setup_config=setup,
-            first_server=first_server,
-            network_mode="server",
-            server_conn=server,
-            controlled_paddle=host_paddle,
-        )
         try:
-            engine.game_loop()
+            while True:
+                engine = NetworkGameEngine(
+                    screen,
+                    setup_config=setup,
+                    first_server=first_server,
+                    network_mode="server",
+                    server_conn=server,
+                    controlled_paddle=host_paddle,
+                )
+                result = engine.game_loop()
+                if result != "replay":
+                    break
         finally:
             server.close()
 
@@ -232,18 +238,20 @@ def main():
         # Utiliser NetworkGameEngine pour le mode client
         from game.network_engine import NetworkGameEngine
 
-        engine = NetworkGameEngine(
-            screen,
-            setup_config=setup,
-            first_server=first_server,
-            network_mode="client",
-            client_conn=client,
-            controlled_paddle=client_paddle,
-        )
-        # Appliquer le multiplicateur de vitesse défini par le serveur.
-        engine.ball_speed_factor = float(ball_speed_factor)
         try:
-            engine.game_loop()
+            while True:
+                engine = NetworkGameEngine(
+                    screen,
+                    setup_config=setup,
+                    first_server=first_server,
+                    network_mode="client",
+                    client_conn=client,
+                    controlled_paddle=client_paddle,
+                )
+                engine.ball_speed_factor = float(ball_speed_factor)
+                result = engine.game_loop()
+                if result != "replay":
+                    break
         finally:
             client.close()
 
