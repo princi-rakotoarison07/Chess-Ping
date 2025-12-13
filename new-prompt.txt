@@ -1,8 +1,0 @@
-Le système de placement des pièces dans Chess-Ping ne respecte pas 
-la configuration choisie avant la partie et doit être corrigé avec une logique de priorité stratégique.
- Lorsque l'utilisateur choisit un plateau 2x2 avec une limite de 4 pièces par couleur et sélectionne
-  par exemple 1 Reine, 1 Roi, et 2 Tours, le jeu doit placer exactement ces pièces et pas d'autres.
-   Actuellement, le jeu place toutes les pièces disponibles indépendamment de la configuration 
-   sélectionnée. La correction doit implémenter cette logique : lire les valeurs des inputs de
-    configuration de la partie (nombre de chaque type de pièce sélectionné), puis placer uniquement ces pièces sur le plateau en respectant le nombre de lignes choisi (BOARD_ROWS). Pour l'ordre de placement stratégique, les pièces défensives (Tours: moindre priorite par rapport au reine , roi) doivent être placées en avant (côté droit du plateau, lignes du bas pour les Blancs, lignes du haut pour les Noirs) pour protéger les pièces importantes (Reine et Roi) qui sont positionnées en arrière (côté gauche du plateau). Par exemple pour les Blancs en 2x2 : colonne de droite (col 1) = 2 Tours empilées, colonne de gauche (col 0) = Roi en bas puis Reine au-dessus,
- créant ainsi une formation défensive où les Tours protègent le Roi et la Reine.
